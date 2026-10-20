@@ -14,6 +14,29 @@ htmlcov/
 .venv/
 venv/
 env/
+ENV/
+**/.venv/
+**/venv/
+**/env/
+
+# Node / frontend
+node_modules/
+**/node_modules/
+.npm/
+.pnpm-store/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Cache / temp files
+.cache/
+*.log
 
 # IDE / editor settings
 .idea/
@@ -22,11 +45,15 @@ env/
 # Local databases and generated files
 *.sqlite3
 *.db
-*.log
 
 # Local environment files
 .env
 .env.*
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+!**/.env.sample
 
 # OS metadata
 .DS_Store

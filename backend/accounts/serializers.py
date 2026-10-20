@@ -6,6 +6,9 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import TokenError
+
+from .models import RefreshSession
 
 User = get_user_model()
 
@@ -21,33 +24,42 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'email': {'required': True},
             'first_name': {'required': True},
             'last_name': {'required': True},
+            'role': {'required': False},
         }
 
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('An account with this email already exists. Please sign in.')
+        return value
+
     def validate(self, attrs):
-        password = attrs.get('password')
-        password_confirm = attrs.get('password_confirm')
-
-        if password and password_confirm and password != password_confirm:
+        if attrs.get('password') != attrs.get('password_confirm'):
             raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
-
         try:
-            validate_password(password)
+            validate_password(attrs['password'])
         except DjangoValidationError as exc:
             raise serializers.ValidationError({'password': list(exc.messages)}) from exc
-
         return attrs
 
     def create(self, validated_data):
         validated_data.pop('password_confirm', None)
         password = validated_data.pop('password')
-        user = User.objects.create_user(password=password, **validated_data)
-        return user
+        return User.objects.create_user(password=password, **validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'role', 'is_verified', 'date_joined')
+        fields = (
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'role',
+            'is_verified',
+            'email_verified_at',
+            'date_joined',
+        )
         read_only_fields = fields
 
 
@@ -58,14 +70,12 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         email = attrs.get('email')
         password = attrs.get('password')
-        user = authenticate(request=self.context.get('request'), email=email, password=password)
+        user = authenticate(request=self.context.get('request'), username=email, password=password)
 
         if not user:
             raise serializers.ValidationError({'detail': 'Invalid email or password.'})
-
         if not user.is_active:
             raise serializers.ValidationError({'detail': 'This account is disabled.'})
-
         if not user.is_verified:
             raise serializers.ValidationError({'detail': 'Please verify your email before logging in.'})
 
@@ -81,8 +91,8 @@ class VerifyEmailSerializer(serializers.Serializer):
         try:
             user_id = force_str(urlsafe_base64_decode(attrs['uid']))
             user = User.objects.get(pk=user_id)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-            raise serializers.ValidationError({'detail': 'Invalid verification link.'})
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as exc:
+            raise serializers.ValidationError({'detail': 'Invalid verification link.'}) from exc
 
         if not default_token_generator.check_token(user, attrs['token']):
             raise serializers.ValidationError({'detail': 'Invalid or expired verification token.'})
@@ -102,17 +112,12 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     password_confirm = serializers.CharField(write_only=True, min_length=8)
 
     def validate(self, attrs):
-        password = attrs.get('password')
-        password_confirm = attrs.get('password_confirm')
-
-        if password and password_confirm and password != password_confirm:
+        if attrs.get('password') != attrs.get('password_confirm'):
             raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
-
         try:
-            validate_password(password)
+            validate_password(attrs['password'])
         except DjangoValidationError as exc:
             raise serializers.ValidationError({'password': list(exc.messages)}) from exc
-
         return attrs
 
 
@@ -122,4 +127,27 @@ class CookieTokenRefreshSerializer(TokenRefreshSerializer):
         if not refresh:
             raise serializers.ValidationError({'refresh': 'This field is required.'})
         attrs['refresh'] = refresh
-        return super().validate(attrs)
+        try:
+            return super().validate(attrs)
+        except TokenError as exc:
+            raise serializers.ValidationError({'refresh': str(exc)}) from exc
+
+
+class RefreshSessionSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source='public_id', read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = RefreshSession
+        fields = (
+            'id',
+            'device_label',
+            'user_agent',
+            'ip_address',
+            'created_at',
+            'last_used_at',
+            'expires_at',
+            'revoked_at',
+            'is_active',
+        )
+        read_only_fields = fields

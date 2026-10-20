@@ -8,6 +8,8 @@ from .views import (
     PasswordResetRequestAPIView,
     RefreshTokenAPIView,
     RegisterAPIView,
+    SessionListAPIView,
+    SessionRevokeAPIView,
     VerifyEmailAPIView,
 )
 
@@ -17,7 +19,10 @@ urlpatterns = [
     path('refresh/', RefreshTokenAPIView.as_view(), name='auth-refresh'),
     path('logout/', LogoutAPIView.as_view(), name='auth-logout'),
     path('verify-email/', VerifyEmailAPIView.as_view(), name='auth-verify-email'),
+    path('verify/', VerifyEmailAPIView.as_view(), name='auth-verify'),
     path('password/reset/', PasswordResetRequestAPIView.as_view(), name='auth-password-reset-request'),
     path('password/reset/confirm/', PasswordResetConfirmAPIView.as_view(), name='auth-password-reset-confirm'),
     path('me/', MeAPIView.as_view(), name='auth-me'),
+    path('sessions/', SessionListAPIView.as_view(), name='auth-sessions'),
+    path('sessions/<uuid:session_id>/revoke/', SessionRevokeAPIView.as_view(), name='auth-session-revoke'),
 ]

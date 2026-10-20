@@ -1,20 +1,29 @@
+import hashlib
+from datetime import datetime, timezone as dt_timezone
+from uuid import UUID
+
 from django.conf import settings
-from django.contrib.auth import get_user_model, password_validation
+from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+from django.db import transaction
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError, UntypedToken
 
+from .models import RefreshSession
 from .serializers import (
     CookieTokenRefreshSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    RefreshSessionSerializer,
     UserRegistrationSerializer,
     UserSerializer,
     VerifyEmailSerializer,
@@ -23,38 +32,127 @@ from .serializers import (
 User = get_user_model()
 
 
-def build_token_pair(user):
-    refresh = RefreshToken.for_user(user)
-    return str(refresh.access_token), str(refresh)
+def request_id(request):
+    return request.headers.get('X-Request-ID', '')
+
+
+def ok_response(request, message, data=None, status_code=status.HTTP_200_OK):
+    payload = {
+        'code': 'ok',
+        'message': message,
+        'request_id': request_id(request),
+    }
+    if data is not None:
+        payload['data'] = data
+    return Response(payload, status=status_code)
+
+
+def error_response(request, code, message, status_code, field_errors=None):
+    payload = {
+        'code': code,
+        'message': message,
+        'request_id': request_id(request),
+    }
+    if field_errors:
+        payload['field_errors'] = field_errors
+    return Response(payload, status=status_code)
+
+
+def hash_jti(jti):
+    return hashlib.sha256(jti.encode('utf-8')).hexdigest()
+
+
+def refresh_expiry(refresh_token):
+    return datetime.fromtimestamp(refresh_token['exp'], tz=dt_timezone.utc)
+
+
+def get_request_ip(request):
+    forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
 
 
 def set_refresh_cookie(response, refresh_token):
-    max_age = settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()
+    max_age = int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())
     response.set_cookie(
-        key='refresh_token',
+        key=settings.AUTH_REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
-        secure=not settings.DEBUG,
-        samesite='Lax',
-        max_age=int(max_age),
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+        max_age=max_age,
+        path=settings.AUTH_REFRESH_COOKIE_PATH,
     )
     return response
 
 
+def clear_refresh_cookie(response):
+    response.delete_cookie(
+        settings.AUTH_REFRESH_COOKIE_NAME,
+        path=settings.AUTH_REFRESH_COOKIE_PATH,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+    )
+
+
+def create_refresh_session(user, refresh_token, request, family_id=None, replaced_session=None):
+    session, _ = RefreshSession.objects.update_or_create(
+        jti_hash=hash_jti(refresh_token['jti']),
+        defaults={
+            'user': user,
+            'family_id': family_id or uuid_from_str(refresh_token['jti']),
+            'device_label': request.headers.get('X-Device-Label', ''),
+            'user_agent': request.META.get('HTTP_USER_AGENT', '')[:255],
+            'ip_address': get_request_ip(request),
+            'last_used_at': timezone.now(),
+            'expires_at': refresh_expiry(refresh_token),
+        },
+    )
+    if replaced_session:
+        replaced_session.revoked_at = timezone.now()
+        replaced_session.revoked_reason = 'rotated'
+        replaced_session.replaced_by = session
+        replaced_session.save(update_fields=['revoked_at', 'revoked_reason', 'replaced_by'])
+    return session
+
+
+def uuid_from_str(value):
+    return UUID(hashlib.md5(value.encode('utf-8')).hexdigest())
+
+
+def token_pair_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return refresh.access_token, refresh
+
+
 class RegisterAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_register'
 
     def post(self, request, *args, **kwargs):
         serializer = UserRegistrationSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            message = 'Registration failed due to invalid input.'
+            email_errors = serializer.errors.get('email')
+            if email_errors and any('already exists' in str(error).lower() for error in email_errors):
+                message = 'This email is already registered. Please sign in.'
+            return error_response(
+                request,
+                code='validation_error',
+                message=message,
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
 
-        user = serializer.save()
-        access_token, refresh_token = build_token_pair(user)
+        with transaction.atomic():
+            user = serializer.save()
+            access_token, refresh_token = token_pair_for_user(user)
+            create_refresh_session(user, refresh_token, request)
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
-        verification_link = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/verify-email?uid={uid}&token={token}"
+        verification_link = f"{settings.FRONTEND_URL}/auth/verify-email?uid={uid}&token={token}"
         send_mail(
             subject='Verify your Bharini account',
             message=(
@@ -62,109 +160,198 @@ class RegisterAPIView(APIView):
                 f"Please verify your email by visiting: {verification_link}\n\n"
                 'If you did not create this account, you can ignore this email.'
             ),
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@bharini.local'),
+            from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             fail_silently=False,
         )
 
-        response = Response(
-            {
-                'message': 'User registered successfully. Please verify your email to complete onboarding.',
+        response = ok_response(
+            request,
+            message='User registered successfully. Please verify your email.',
+            data={
                 'user': UserSerializer(user).data,
-                'tokens': {'access': access_token, 'refresh': refresh_token},
+                'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
             },
-            status=status.HTTP_201_CREATED,
+            status_code=status.HTTP_201_CREATED,
         )
-        return set_refresh_cookie(response, refresh_token)
+        return set_refresh_cookie(response, str(refresh_token))
 
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
 
     def post(self, request, *args, **kwargs):
         serializer = LoginSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='invalid_credentials',
+                message='Login failed.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
 
         user = serializer.validated_data['user']
-        access_token, refresh_token = build_token_pair(user)
-        response = Response(
-            {
-                'message': 'Login successful.',
+        access_token, refresh_token = token_pair_for_user(user)
+        create_refresh_session(user, refresh_token, request)
+
+        response = ok_response(
+            request,
+            message='Login successful.',
+            data={
                 'user': UserSerializer(user).data,
-                'tokens': {'access': access_token, 'refresh': refresh_token},
+                'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
             },
-            status=status.HTTP_200_OK,
         )
-        return set_refresh_cookie(response, refresh_token)
+        return set_refresh_cookie(response, str(refresh_token))
 
 
 class RefreshTokenAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_refresh'
 
     def post(self, request, *args, **kwargs):
-        refresh_token = request.data.get('refresh') or request.COOKIES.get('refresh_token')
-        serializer = CookieTokenRefreshSerializer(data={'refresh': refresh_token}, context={'request': request})
+        refresh_from_request = request.data.get('refresh') or request.COOKIES.get(settings.AUTH_REFRESH_COOKIE_NAME)
+        serializer = CookieTokenRefreshSerializer(data={'refresh': refresh_from_request}, context={'request': request})
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='invalid_refresh_token',
+                message='Refresh token is invalid.',
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                field_errors=serializer.errors,
+            )
 
-        data = serializer.validated_data
-        response = Response({'access': data['access'], 'refresh': data.get('refresh')}, status=status.HTTP_200_OK)
-        if data.get('refresh'):
-            return set_refresh_cookie(response, data['refresh'])
+        old_jti = UntypedToken(refresh_from_request)['jti']
+        try:
+            old_session = RefreshSession.objects.select_related('user').get(jti_hash=hash_jti(old_jti))
+        except RefreshSession.DoesNotExist:
+            return error_response(
+                request,
+                code='invalid_refresh_session',
+                message='Refresh session not found.',
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if old_session.revoked_at or old_session.expires_at <= timezone.now():
+            return error_response(
+                request,
+                code='revoked_refresh_session',
+                message='Refresh session has been revoked.',
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        access_token = serializer.validated_data['access']
+        next_refresh = serializer.validated_data.get('refresh')
+        payload = {'access': access_token}
+
+        if next_refresh:
+            new_refresh_token = RefreshToken(next_refresh)
+            create_refresh_session(
+                old_session.user,
+                new_refresh_token,
+                request,
+                family_id=old_session.family_id,
+                replaced_session=old_session,
+            )
+            payload['refresh'] = next_refresh
+        else:
+            old_session.last_used_at = timezone.now()
+            old_session.save(update_fields=['last_used_at'])
+
+        response = ok_response(request, message='Token refreshed successfully.', data=payload)
+        if next_refresh:
+            set_refresh_cookie(response, next_refresh)
         return response
 
 
 class LogoutAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_logout'
 
     def post(self, request, *args, **kwargs):
-        refresh_token = request.data.get('refresh') or request.COOKIES.get('refresh_token')
+        refresh_token = request.data.get('refresh') or request.COOKIES.get(settings.AUTH_REFRESH_COOKIE_NAME)
         if not refresh_token:
-            return Response({'detail': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='missing_refresh_token',
+                message='Refresh token is required.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             token = RefreshToken(refresh_token)
+            session = RefreshSession.objects.filter(jti_hash=hash_jti(token['jti'])).first()
+            if session and not session.revoked_at:
+                session.revoked_at = timezone.now()
+                session.revoked_reason = 'logout'
+                session.save(update_fields=['revoked_at', 'revoked_reason'])
             token.blacklist()
         except TokenError:
-            pass
+            return error_response(
+                request,
+                code='invalid_refresh_token',
+                message='Refresh token is invalid.',
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
 
-        response = Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
-        response.delete_cookie('refresh_token')
+        response = ok_response(request, message='Logged out successfully.')
+        clear_refresh_cookie(response)
         return response
 
 
 class VerifyEmailAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_verify'
 
     def post(self, request, *args, **kwargs):
         serializer = VerifyEmailSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='invalid_verification_token',
+                message='Verification failed.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
 
         user = serializer.validated_data['user']
         if user.is_verified:
-            return Response({'message': 'This email is already verified.'}, status=status.HTTP_200_OK)
+            return ok_response(request, message='Email is already verified.')
 
         user.is_verified = True
-        user.save(update_fields=['is_verified'])
-        return Response({'message': 'Email verified successfully.'}, status=status.HTTP_200_OK)
+        user.email_verified_at = timezone.now()
+        user.save(update_fields=['is_verified', 'email_verified_at'])
+        return ok_response(request, message='Email verified successfully.')
 
 
 class PasswordResetRequestAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_password_reset'
 
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='validation_error',
+                message='Invalid password reset request.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
 
         email = serializer.validated_data['email']
         user = User.objects.filter(email=email).first()
         if user:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
-            reset_link = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/reset-password?uid={uid}&token={token}"
+            reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
             send_mail(
                 subject='Reset your Bharini password',
                 message=(
@@ -172,41 +359,86 @@ class PasswordResetRequestAPIView(APIView):
                     f"Use the following link to reset your password: {reset_link}\n\n"
                     'If you did not request this reset, ignore this message.'
                 ),
-                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@bharini.local'),
+                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[user.email],
                 fail_silently=False,
             )
 
-        return Response(
-            {'message': 'If the account exists, a password reset link has been sent.'},
-            status=status.HTTP_200_OK,
-        )
+        return ok_response(request, message='If the account exists, a password reset link has been sent.')
 
 
 class PasswordResetConfirmAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_password_reset'
 
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='validation_error',
+                message='Invalid password reset payload.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
 
         try:
             user_id = force_str(urlsafe_base64_decode(serializer.validated_data['uid']))
             user = User.objects.get(pk=user_id)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-            return Response({'detail': 'Invalid or expired reset link.'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='invalid_reset_link',
+                message='Invalid or expired reset link.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not default_token_generator.check_token(user, serializer.validated_data['token']):
-            return Response({'detail': 'Invalid or expired reset link.'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                code='invalid_reset_link',
+                message='Invalid or expired reset link.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
 
         user.set_password(serializer.validated_data['password'])
         user.save(update_fields=['password'])
-        return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
+        return ok_response(request, message='Password reset successful.')
 
 
 class MeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+        return ok_response(request, message='Current user profile.', data=UserSerializer(request.user).data)
+
+
+class SessionListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        sessions = RefreshSession.objects.filter(user=request.user).order_by('-last_used_at')
+        serializer = RefreshSessionSerializer(sessions, many=True)
+        return ok_response(request, message='Sessions retrieved.', data={'sessions': serializer.data})
+
+
+class SessionRevokeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id, *args, **kwargs):
+        session = RefreshSession.objects.filter(user=request.user, public_id=session_id).first()
+        if not session:
+            return error_response(
+                request,
+                code='session_not_found',
+                message='Session not found.',
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not session.revoked_at:
+            session.revoked_at = timezone.now()
+            session.revoked_reason = 'user_revoked'
+            session.save(update_fields=['revoked_at', 'revoked_reason'])
+
+        return ok_response(request, message='Session revoked successfully.')

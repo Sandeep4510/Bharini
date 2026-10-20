@@ -1,0 +1,30 @@
+{
+  "name": "bharini",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "lint": "npm run lint --workspace apps/web"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sandeep4510/Bharini.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Sandeep4510/Bharini/issues"
+  },
+  "homepage": "https://github.com/Sandeep4510/Bharini#readme",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
