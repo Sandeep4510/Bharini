@@ -90,9 +90,12 @@ export default function Home() {
                 </div>
               </div>
 
-              <button className="mt-6 w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400">
+              <Link
+                href="/auth/login"
+                className="mt-6 block w-full rounded-xl bg-violet-500 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-violet-400"
+              >
                 Apply now
-              </button>
+              </Link>
             </div>
           </div>
         </div>

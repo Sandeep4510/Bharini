@@ -32,7 +32,7 @@ export function AuthShell({
                 Artist-first platform
               </p>
               <h1 className="max-w-md text-4xl font-semibold leading-tight text-white">
-                Build trust, discover talent, and publish casting calls faster.
+                Find a role, become a star.
               </h1>
             </div>
 
@@ -68,12 +68,14 @@ export function AuthInput({
   placeholder,
   value,
   onChange,
+  error,
 }: {
   label: string;
   type?: string;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
   return (
     <label className="block">
@@ -83,8 +85,14 @@ export function AuthInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-3 text-base text-white outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+        aria-invalid={error ? true : undefined}
+        className={`w-full rounded-xl border bg-slate-950/70 px-3.5 py-3 text-base text-white outline-none transition placeholder:text-slate-400 focus:ring-2 ${
+          error
+            ? "border-red-500 focus:border-red-400 focus:ring-red-500/20"
+            : "border-slate-700 focus:border-violet-400 focus:ring-violet-500/20"
+        }`}
       />
+      {error ? <span className="mt-1.5 block text-sm text-red-300">{error}</span> : null}
     </label>
   );
 }

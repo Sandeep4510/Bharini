@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { apiClient } from '@bharini/api-client';
 
 import { AuthButton, AuthInput, AuthShell } from '@/components/auth-shell';
+import { PasswordChecklist } from '@/components/password-checklist';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -61,6 +62,7 @@ export default function ResetPasswordPage() {
         ) : null}
 
         <AuthInput label="New password" type="password" placeholder="New password" value={password} onChange={setPassword} />
+        <PasswordChecklist password={password} />
         <AuthInput label="Confirm password" type="password" placeholder="Repeat new password" value={confirmPassword} onChange={setConfirmPassword} />
         <AuthButton>{isSubmitting ? 'Updating...' : 'Update password'}</AuthButton>
 

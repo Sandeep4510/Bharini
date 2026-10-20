@@ -10,6 +10,12 @@ export type ApiClientOptions = {
 
 export type AuthApiResponse<T> = ApiEnvelope<T>;
 
+export class ApiError extends Error {
+  constructor(message: string, public fieldErrors: Record<string, string[]> = {}) {
+    super(message);
+  }
+}
+
 export class ApiClient {
   baseUrl: string;
   accessToken: string | null;
@@ -18,7 +24,7 @@ export class ApiClient {
 
   constructor(options: ApiClientOptions = {}) {
     const stored = readSession();
-    this.baseUrl = options.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8001';
+    this.baseUrl = options.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
     this.accessToken = options.accessToken ?? stored.accessToken ?? null;
     this.refreshToken = options.refreshToken ?? stored.refreshToken ?? null;
     this.credentials = options.credentials ?? 'include';
@@ -91,7 +97,7 @@ export class ApiClient {
 
     if (!response.ok) {
       const message = typeof payload === 'string' ? payload : payload?.message || 'Request failed';
-      throw new Error(message);
+      throw new ApiError(message, typeof payload === 'string' ? {} : payload?.field_errors);
     }
 
     return payload as T;
@@ -163,7 +169,7 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8001',
+  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000',
 });
 
 export default ApiClient;

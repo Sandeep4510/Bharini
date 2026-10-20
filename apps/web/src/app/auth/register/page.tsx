@@ -4,8 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { ApiError } from '@bharini/api-client';
+
 import { useAuth } from '@/components/auth-provider';
 import { AuthButton, AuthInput, AuthShell } from '@/components/auth-shell';
+import { PasswordChecklist, unmetPasswordRules } from '@/components/password-checklist';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,10 +21,23 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
+
+    const unmet = unmetPasswordRules(password);
+    const clientErrors: Record<string, string> = {};
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) clientErrors.email = 'Enter a valid email address, like you@example.com.';
+    if (unmet.length) clientErrors.password = `Password needs: ${unmet.join(', ')}.`;
+    if (password !== confirmPassword) clientErrors.password_confirm = 'Passwords do not match.';
+    setFieldErrors(clientErrors);
+    if (Object.keys(clientErrors).length) {
+      setError('Please fix the highlighted fields.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -36,6 +52,8 @@ export default function RegisterPage() {
 
       router.push('/auth/verify-email');
     } catch (caughtError) {
+      const serverFieldErrors = caughtError instanceof ApiError ? caughtError.fieldErrors : {};
+      setFieldErrors(Object.fromEntries(Object.entries(serverFieldErrors).map(([field, messages]) => [field, messages.join(' ')])));
       setError(caughtError instanceof Error ? caughtError.message : 'Registration failed');
     } finally {
       setIsSubmitting(false);
@@ -47,7 +65,7 @@ export default function RegisterPage() {
       title="Create account"
       subtitle="Join Bharini as an artist or a production house."
     >
-      <form className="space-y-4" onSubmit={handleSubmit}>
+      <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         {error ? (
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
@@ -55,11 +73,11 @@ export default function RegisterPage() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <AuthInput label="First name" placeholder="Aisha" value={firstName} onChange={setFirstName} />
-          <AuthInput label="Last name" placeholder="Sharma" value={lastName} onChange={setLastName} />
+          <AuthInput label="First name" placeholder="Aisha" value={firstName} onChange={setFirstName} error={fieldErrors.first_name} />
+          <AuthInput label="Last name" placeholder="Sharma" value={lastName} onChange={setLastName} error={fieldErrors.last_name} />
         </div>
 
-        <AuthInput label="Email" type="email" placeholder="you@example.com" value={email} onChange={setEmail} />
+        <AuthInput label="Email" type="email" placeholder="you@example.com" value={email} onChange={setEmail} error={fieldErrors.email} />
 
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-200">I am signing up as</span>
@@ -73,8 +91,9 @@ export default function RegisterPage() {
           </select>
         </label>
 
-        <AuthInput label="Password" type="password" placeholder="Create a strong password" value={password} onChange={setPassword} />
-        <AuthInput label="Confirm password" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={setConfirmPassword} />
+        <AuthInput label="Password" type="password" placeholder="Create a strong password" value={password} onChange={setPassword} error={fieldErrors.password} />
+        <PasswordChecklist password={password} />
+        <AuthInput label="Confirm password" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={setConfirmPassword} error={fieldErrors.password_confirm} />
 
         <AuthButton>{isSubmitting ? 'Creating account...' : 'Create account'}</AuthButton>
 

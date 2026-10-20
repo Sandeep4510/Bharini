@@ -67,7 +67,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@bharini.local')
 AUTH_REFRESH_COOKIE_NAME = os.getenv('AUTH_REFRESH_COOKIE_NAME', 'refresh_token')
 AUTH_REFRESH_COOKIE_PATH = os.getenv('AUTH_REFRESH_COOKIE_PATH', '/api/v1/auth/')
@@ -185,6 +185,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+    {
+        'NAME': 'accounts.validators.CharacterClassValidator',
     },
 ]
 

@@ -133,7 +133,7 @@ class RegisterAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = UserRegistrationSerializer(data=request.data)
         if not serializer.is_valid():
-            message = 'Registration failed due to invalid input.'
+            message = 'Please fix the highlighted fields.'
             email_errors = serializer.errors.get('email')
             if email_errors and any('already exists' in str(error).lower() for error in email_errors):
                 message = 'This email is already registered. Please sign in.'

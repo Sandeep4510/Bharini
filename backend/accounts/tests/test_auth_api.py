@@ -48,6 +48,23 @@ class AuthApiTests(TestCase):
         self.assertFalse(User.objects.get(email=self.email).is_verified)
         self.assertEqual(RefreshSession.objects.filter(user__email=self.email).count(), 1)
 
+    def test_register_rejects_password_missing_character_classes(self):
+        response = self.client.post(
+            '/api/v1/auth/register/',
+            {
+                'email': self.email,
+                'first_name': 'Bharini',
+                'last_name': 'User',
+                'role': 'artist',
+                'password': 'weakpassword',
+                'password_confirm': 'weakpassword',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(email=self.email).exists())
+
     def test_login_requires_verified_email(self):
         User.objects.create_user(
             email=self.email,
