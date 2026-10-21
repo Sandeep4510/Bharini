@@ -1,6 +1,10 @@
+from unittest import mock
+from urllib.parse import parse_qs, urlparse
+
+from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework.test import APIClient
@@ -184,3 +188,52 @@ class AuthApiTests(TestCase):
     def test_me_requires_authentication(self):
         response = self.client.get('/api/v1/auth/me/')
         self.assertEqual(response.status_code, 401)
+
+    @mock.patch('accounts.views.send_mail_in_background')
+    def test_password_reset_checks_the_email_exists(self, send_mail):
+        response = self.client.post('/api/v1/auth/password/reset/', {'email': 'nobody@example.com'}, format='json')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'account_not_found')
+        send_mail.assert_not_called()
+
+        User.objects.create_user(email=self.email, first_name='A', last_name='B', password=self.password)
+        response = self.client.post('/api/v1/auth/password/reset/', {'email': self.email.upper()}, format='json')
+        self.assertEqual(response.status_code, 200)
+        send_mail.assert_called_once()
+
+    @mock.patch('accounts.views.send_mail_in_background')
+    def test_password_reset_points_social_users_to_their_provider(self, send_mail):
+        user = User.objects.create_user(email=self.email, first_name='A', last_name='B', password=None)
+        SocialAccount.objects.create(user=user, provider='google', uid='123')
+        response = self.client.post('/api/v1/auth/password/reset/', {'email': self.email}, format='json')
+        self.assertEqual(response.data['code'], 'social_account')
+        self.assertIn('Google', response.data['message'])
+        send_mail.assert_not_called()
+
+    def test_social_login_code_exchanges_once_for_tokens(self):
+        user = User.objects.create_user(email=self.email, first_name='A', last_name='B', password=None, is_verified=True)
+        browser = Client()
+        browser.force_login(user, backend='django.contrib.auth.backends.ModelBackend')
+        response = browser.get('/api/v1/auth/social/complete/')
+        self.assertEqual(response.status_code, 302)
+        code = parse_qs(urlparse(response['Location']).query)['code'][0]
+
+        response = self.client.post('/api/v1/auth/social/exchange/', {'code': code}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['data']['user']['email'], self.email)
+        self.assertIn('access', response.data['data']['tokens'])
+
+        response = self.client.post('/api/v1/auth/social/exchange/', {'code': code}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_social_start_remembers_role_and_rejects_unknown_provider(self):
+        browser = Client()
+        providers = {'google': {'APPS': [{'client_id': 'id', 'secret': 's'}]}, 'facebook': {'APPS': []}}
+        with self.settings(SOCIALACCOUNT_PROVIDERS=providers):
+            response = browser.get('/api/v1/auth/social/google/start/?role=production_house')
+            self.assertEqual(response['Location'], '/accounts/google/login/')
+            self.assertEqual(browser.session['social_signup_role'], 'production_house')
+            response = browser.get('/api/v1/auth/social/twitter/start/')
+            self.assertIn('social_error=unknown_provider', response['Location'])
+            response = browser.get('/api/v1/auth/social/facebook/start/')
+            self.assertIn('social_error=not_configured', response['Location'])

@@ -1,3 +1,5 @@
+import re
+import secrets
 from datetime import date
 from urllib.parse import urlparse
 
@@ -6,7 +8,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .media import process_photo
-from .models import PHOTO_SLOTS, ArtistProfile, Discipline, ProfileLanguage
+from .models import PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, ProfileDocument, ProfileLanguage
 from .slots import SHOWREEL_LINK_LIMIT, SLOTS
 
 SHOWREEL_HOSTS = ('youtube.com', 'youtu.be', 'vimeo.com', 'drive.google.com')
@@ -21,6 +23,40 @@ def absolute_url(request, field_file):
     if not field_file:
         return None
     return request.build_absolute_uri(field_file.url) if request else field_file.url
+
+
+def username_taken(username, profile=None):
+    return ArtistProfile.objects.filter(username=username).exclude(pk=getattr(profile, 'pk', None)).exists()
+
+
+def suggest_usernames(wanted, profile, count=4):
+    """Free usernames close to `wanted`: name, birth year and number variations."""
+    base = re.sub(r'[^a-z0-9_.]', '', wanted.lower())[:24] or 'artist'
+    base = base.ljust(3, '_')
+    user = profile.user
+    candidates = [
+        f'{base}_{user.last_name.lower()}' if user.last_name else '',
+        f'{base}.{user.first_name.lower()}' if user.first_name else '',
+        f'{base}{profile.date_of_birth.year}' if profile.date_of_birth else '',
+        f'{base}_official',
+        f'the.{base}',
+        *(f'{base}{secrets.randbelow(900) + 100}' for _ in range(4)),
+    ]
+    candidates = [name[:30] for name in dict.fromkeys(candidates) if name and re.match(USERNAME_PATTERN, name[:30])]
+    taken = set(ArtistProfile.objects.filter(username__in=candidates).values_list('username', flat=True))
+    return [name for name in candidates if name not in taken][:count]
+
+
+class ProfileDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProfileDocument
+        fields = ('id', 'kind', 'title', 'file', 'uploaded_at')
+        read_only_fields = ('id', 'uploaded_at')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['file'] = absolute_url(self.context.get('request'), instance.file)
+        return data
 
 
 class ProfileLanguageSerializer(serializers.ModelSerializer):
@@ -40,7 +76,9 @@ class LanguageListSerializer(serializers.Serializer):
 
 
 class ArtistProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
     languages = ProfileLanguageSerializer(many=True, read_only=True)
+    documents = ProfileDocumentSerializer(many=True, read_only=True)
     alt_email_verified = serializers.SerializerMethodField()
     photos = serializers.SerializerMethodField()
     media_slots = serializers.SerializerMethodField()
@@ -51,10 +89,10 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArtistProfile
         fields = (
+            'username',
             'disciplines',
             'profile_photo',
             'bio',
-            'goal',
             'gender',
             'date_of_birth',
             'height_cm',
@@ -66,6 +104,7 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             'facebook_url',
             'showreel_links',
             'languages',
+            'documents',
             'photos',
             'media_slots',
             'missing_fields',
@@ -97,6 +136,16 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
                 slots.append({**slot, 'file': file})
             sections.append({'discipline': discipline, 'label': Discipline(discipline).label, 'slots': slots})
         return sections
+
+    def validate_username(self, value):
+        value = (value or '').strip().lower()
+        if not value:
+            return None
+        if not re.match(USERNAME_PATTERN, value):
+            raise serializers.ValidationError('Use 3-30 lowercase letters, numbers, dots or underscores.')
+        if username_taken(value, self.instance):
+            raise serializers.ValidationError('This username is taken. Try one of the suggestions.')
+        return value
 
     def validate_disciplines(self, value):
         if not value:

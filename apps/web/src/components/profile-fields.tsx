@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { FocusEvent, ReactNode } from 'react';
 
 import { ApiError } from '@bharini/api-client';
 import type { Option } from '@bharini/types';
@@ -102,4 +102,11 @@ export function TextAreaField({
       />
     </Field>
   );
+}
+
+/** onBlur handler for a field group: runs `check` only when focus leaves the whole group. */
+export function onLeave(check: () => void) {
+  return (event: FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) check();
+  };
 }

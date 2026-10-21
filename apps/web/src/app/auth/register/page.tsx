@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { ApiError } from '@bharini/api-client';
 
 import { useAuth } from '@/components/auth-provider';
-import { AuthButton, AuthInput, AuthShell } from '@/components/auth-shell';
+import { AuthButton, AuthInput, AuthShell, ShowPasswordToggle, SocialButtons } from '@/components/auth-shell';
 import { PasswordChecklist, unmetPasswordRules } from '@/components/password-checklist';
 
 export default function RegisterPage() {
@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [role, setRole] = useState('artist');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -91,11 +92,13 @@ export default function RegisterPage() {
           </select>
         </label>
 
-        <AuthInput label="Password" type="password" placeholder="Create a strong password" value={password} onChange={setPassword} error={fieldErrors.password} />
+        <AuthInput label="Password" type={showPassword ? 'text' : 'password'} placeholder="Create a strong password" value={password} onChange={setPassword} error={fieldErrors.password} />
         <PasswordChecklist password={password} />
-        <AuthInput label="Confirm password" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={setConfirmPassword} error={fieldErrors.password_confirm} />
+        <AuthInput label="Confirm password" type={showPassword ? 'text' : 'password'} placeholder="Repeat your password" value={confirmPassword} onChange={setConfirmPassword} error={fieldErrors.password_confirm} />
+        <ShowPasswordToggle checked={showPassword} onChange={setShowPassword} />
 
         <AuthButton>{isSubmitting ? 'Creating account...' : 'Create account'}</AuthButton>
+        <SocialButtons role={role} />
 
         <p className="text-center text-sm text-slate-300">
           Already have an account?{' '}

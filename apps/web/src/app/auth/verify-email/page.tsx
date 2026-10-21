@@ -56,12 +56,6 @@ export default function VerifyEmailPage() {
             Go to login
           </Link>
         )}
-
-        <p className="text-center text-sm text-slate-300">
-          <Link href="/auth/login" className="font-medium text-violet-300 hover:text-violet-200">
-            Go to login
-          </Link>
-        </p>
       </div>
     </AuthShell>
   );

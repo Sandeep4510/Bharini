@@ -4,9 +4,11 @@ import type {
   ArtistProfile,
   AuthUser,
   PhotoSlot,
+  Post,
   ProfileLanguage,
   ProfileOptions,
   TokenPair,
+  UsernameCheck,
 } from '@bharini/types';
 
 export type ApiClientOptions = {
@@ -66,7 +68,8 @@ export class ApiClient {
       path.includes('/auth/login/') ||
       path.includes('/auth/refresh/') ||
       path.includes('/auth/verify-email/') ||
-      path.includes('/auth/password/reset/')
+      path.includes('/auth/password/reset/') ||
+      path.includes('/auth/social/')
     );
   }
 
@@ -178,6 +181,18 @@ export class ApiClient {
     });
   }
 
+  /** Full-page URL that starts Google/Facebook sign-in on the backend (django-allauth). */
+  socialLoginUrl(provider: 'google' | 'facebook', role?: string) {
+    return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${role ? `?role=${encodeURIComponent(role)}` : ''}`;
+  }
+
+  exchangeSocialCode(code: string) {
+    return this.request<AuthApiResponse<{ user: AuthUser; tokens: TokenPair }>>('/api/v1/auth/social/exchange/', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
   getProfile() {
     return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/');
   }
@@ -218,6 +233,33 @@ export class ApiClient {
 
   deleteMedia(discipline: string, slot: string) {
     return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, { method: 'DELETE' });
+  }
+
+  checkUsername(username: string) {
+    return this.request<AuthApiResponse<UsernameCheck>>(`/api/v1/profile/username-check/?username=${encodeURIComponent(username)}`);
+  }
+
+  addDocument(kind: string, title: string, file: File) {
+    const body = new FormData();
+    body.append('kind', kind);
+    body.append('title', title);
+    body.append('file', file);
+    return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/documents/', { method: 'POST', body });
+  }
+
+  deleteDocument(id: number) {
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/documents/${id}/`, { method: 'DELETE' });
+  }
+
+  getPosts() {
+    return this.request<AuthApiResponse<{ posts: Post[] }>>('/api/v1/posts/');
+  }
+
+  createPost(body: string, media?: File | null) {
+    const form = new FormData();
+    form.append('body', body);
+    if (media) form.append('media', media);
+    return this.request<AuthApiResponse<Post>>('/api/v1/posts/', { method: 'POST', body: form });
   }
 
   sendAltEmailPin() {

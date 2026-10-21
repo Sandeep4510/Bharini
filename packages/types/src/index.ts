@@ -31,11 +31,19 @@ export type MediaSlot = {
 
 export type DisciplineMedia = { discipline: Discipline; label: string; slots: MediaSlot[] };
 
+export type ProfileDocument = {
+  id: number;
+  kind: 'certificate' | 'achievement';
+  title: string;
+  file: string;
+  uploaded_at: string;
+};
+
 export type ArtistProfile = {
+  username: string | null;
   disciplines: Discipline[];
   profile_photo: string | null;
   bio: string;
-  goal: string;
   gender: Gender | '';
   date_of_birth: string | null;
   height_cm: number | null;
@@ -47,6 +55,7 @@ export type ArtistProfile = {
   facebook_url: string;
   showreel_links: string[];
   languages: ProfileLanguage[];
+  documents: ProfileDocument[];
   photos: Record<PhotoSlot, string | null>;
   media_slots: DisciplineMedia[];
   missing_fields: string[];
@@ -61,6 +70,18 @@ export type ProfileOptions = {
   genders: Option[];
   languages: Option[];
   language_levels: Option[];
+  document_kinds: Option[];
+};
+
+export type UsernameCheck = { username: string; available: boolean; suggestions: string[] };
+
+export type Post = {
+  id: number;
+  author_name: string;
+  body: string;
+  media: string | null;
+  media_kind: 'image' | 'video' | '';
+  created_at: string;
 };
 
 export type TokenPair = {

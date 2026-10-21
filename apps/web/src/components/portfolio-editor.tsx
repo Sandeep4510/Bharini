@@ -3,13 +3,16 @@
 import { useState } from 'react';
 
 import { apiClient } from '@bharini/api-client';
-import type { ArtistProfile } from '@bharini/types';
+import type { ArtistProfile, Discipline } from '@bharini/types';
 
+import { DocumentsSection } from '@/components/documents-section';
 import { MediaSlotGrid } from '@/components/media-slot-grid';
 import { PhotoSlots } from '@/components/photo-slots';
 import { errorMessage, fieldErrorsFrom, inputClass, okBorder, secondaryButton } from '@/components/profile-fields';
 
 const SHOWREEL_LIMIT = 5;
+// mirrors ArtistProfile.needs_casting_photos on the backend
+const CASTING_PHOTO_DISCIPLINES: Discipline[] = ['actor', 'choreographer'];
 
 function ShowreelLinks({ profile, onProfile }: { profile: ArtistProfile; onProfile: (profile: ArtistProfile) => void }) {
   const [links, setLinks] = useState<string[]>(profile.showreel_links.length ? profile.showreel_links : ['']);
@@ -72,11 +75,13 @@ export function PortfolioEditor({ profile, onProfile }: { profile: ArtistProfile
 
   return (
     <div className="space-y-8">
-      <section>
-        <h2 className="text-xl font-semibold text-white">Casting photos</h2>
-        <p className="mt-1 mb-4 text-sm text-slate-400">Casting teams compare these four shots first. Natural light, no filters.</p>
-        <PhotoSlots profile={profile} onProfile={onProfile} />
-      </section>
+      {profile.disciplines.some((discipline) => CASTING_PHOTO_DISCIPLINES.includes(discipline)) ? (
+        <section>
+          <h2 className="text-xl font-semibold text-white">Casting photos</h2>
+          <p className="mt-1 mb-4 text-sm text-slate-400">Casting teams compare these four shots first. Natural light, no filters.</p>
+          <PhotoSlots profile={profile} onProfile={onProfile} />
+        </section>
+      ) : null}
 
       {section ? (
         <section>
@@ -114,6 +119,8 @@ export function PortfolioEditor({ profile, onProfile }: { profile: ArtistProfile
           {section.discipline === 'director' ? <ShowreelLinks profile={profile} onProfile={onProfile} /> : null}
         </section>
       ) : null}
+
+      <DocumentsSection profile={profile} onProfile={onProfile} />
     </div>
   );
 }

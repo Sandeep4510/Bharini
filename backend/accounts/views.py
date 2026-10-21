@@ -1,11 +1,15 @@
 import hashlib
+import secrets
 from datetime import datetime, timezone as dt_timezone
 from uuid import UUID
 
+from allauth.socialaccount.providers import registry
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 from django.db import transaction
+from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -18,12 +22,14 @@ from rest_framework_simplejwt.tokens import RefreshToken, TokenError, UntypedTok
 from .mail import send_mail_in_background
 from .models import RefreshSession
 from .responses import error_response, ok_response
+from .social import SIGNUP_ROLES, SOCIAL_ROLE_SESSION_KEY
 from .serializers import (
     CookieTokenRefreshSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RefreshSessionSerializer,
+    SocialExchangeSerializer,
     UserRegistrationSerializer,
     UserSerializer,
     VerifyEmailSerializer,
@@ -165,19 +171,74 @@ class LoginAPIView(APIView):
                 field_errors=serializer.errors,
             )
 
-        user = serializer.validated_data['user']
-        access_token, refresh_token = token_pair_for_user(user)
-        create_refresh_session(user, refresh_token, request)
+        return login_response(request, serializer.validated_data['user'])
 
-        response = ok_response(
-            request,
-            message='Login successful.',
-            data={
-                'user': UserSerializer(user).data,
-                'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
-            },
-        )
-        return set_refresh_cookie(response, str(refresh_token))
+
+def login_response(request, user):
+    access_token, refresh_token = token_pair_for_user(user)
+    create_refresh_session(user, refresh_token, request)
+
+    response = ok_response(
+        request,
+        message='Login successful.',
+        data={
+            'user': UserSerializer(user).data,
+            'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
+        },
+    )
+    return set_refresh_cookie(response, str(refresh_token))
+
+
+SOCIAL_PROVIDERS = ('google', 'facebook')
+SOCIAL_CODE_LIFETIME_SECONDS = 60
+
+
+def social_code_key(code):
+    return f'social-login:{code}'
+
+
+def social_start(request, provider):
+    """Remember the role picked on the register page, then hand over to allauth's provider login."""
+    if provider not in SOCIAL_PROVIDERS:
+        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=unknown_provider')
+    if not settings.SOCIALACCOUNT_PROVIDERS[provider]['APPS']:
+        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=not_configured')
+    role = request.GET.get('role')
+    if role in SIGNUP_ROLES:
+        request.session[SOCIAL_ROLE_SESSION_KEY] = role
+    return redirect(f'/accounts/{provider}/login/')
+
+
+def social_complete(request):
+    """allauth lands here (LOGIN_REDIRECT_URL) with a Django session; swap it for a one-time code."""
+    if not request.user.is_authenticated:
+        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=unknown')
+    code = secrets.token_urlsafe(32)
+    # shortcut: default cache is per-process memory; use a shared cache (Redis) once Django runs multiple workers
+    cache.set(social_code_key(code), request.user.pk, SOCIAL_CODE_LIFETIME_SECONDS)
+    logout(request)  # the frontend uses JWTs, not this session
+    return redirect(f'{settings.FRONTEND_URL}/auth/social?code={code}')
+
+
+class SocialExchangeAPIView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
+
+    def post(self, request, *args, **kwargs):
+        serializer = SocialExchangeSerializer(data=request.data)
+        user_id = cache.get(social_code_key(serializer.validated_data['code'])) if serializer.is_valid() else None
+        if user_id is not None:
+            cache.delete(social_code_key(serializer.validated_data['code']))
+        user = User.objects.filter(pk=user_id, is_active=True).first() if user_id else None
+        if not user:
+            return error_response(
+                request,
+                code='invalid_social_code',
+                message='Sign-in link expired. Please try again.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return login_response(request, user)
 
 
 class RefreshTokenAPIView(APIView):
@@ -319,22 +380,38 @@ class PasswordResetRequestAPIView(APIView):
             )
 
         email = serializer.validated_data['email']
-        user = User.objects.filter(email=email).first()
-        if user:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
-            send_mail_in_background(
-                subject='Reset your Bharini password',
-                message=(
-                    f"Hi {user.first_name or user.email},\n\n"
-                    f"Use the following link to reset your password: {reset_link}\n\n"
-                    'If you did not request this reset, ignore this message.'
-                ),
-                recipient=user.email,
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return error_response(
+                request,
+                code='account_not_found',
+                message='No Bharini account uses this email. Check it, or create an account.',
+                status_code=status.HTTP_404_NOT_FOUND,
+                field_errors={'email': ['No account found with this email.']},
             )
+        if not user.has_usable_password():
+            # registry lookup, not account.get_provider(): that one needs the provider's app keys configured
+            providers = sorted({registry.get_class(account.provider).name for account in user.socialaccount_set.all()})
+            return error_response(
+                request,
+                code='social_account',
+                message=f"This account signs in with {' / '.join(providers) or 'a social login'}. Use that button on the login page.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
+        send_mail_in_background(
+            subject='Reset your Bharini password',
+            message=(
+                f"Hi {user.first_name or user.email},\n\n"
+                f"Use the following link to reset your password: {reset_link}\n\n"
+                'If you did not request this reset, ignore this message.'
+            ),
+            recipient=user.email,
+        )
 
-        return ok_response(request, message='If the account exists, a password reset link has been sent.')
+        return ok_response(request, message=f'Password reset link sent to {user.email}.')
 
 
 class PasswordResetConfirmAPIView(APIView):

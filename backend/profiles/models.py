@@ -54,6 +54,13 @@ def media_upload_to(instance, filename):
     return f'artists/{instance.profile.user_id}/{instance.kind}/{uuid.uuid4().hex}{Path(filename).suffix.lower()}'
 
 
+def document_upload_to(instance, filename):
+    return f'artists/{instance.profile.user_id}/documents/{uuid.uuid4().hex}{Path(filename).suffix.lower()}'
+
+
+USERNAME_PATTERN = r'^[a-z0-9_.]{3,30}$'
+
+
 class ArtistProfile(models.Model):
     class Gender(models.TextChoices):
         MALE = 'male', 'Male'
@@ -61,14 +68,20 @@ class ArtistProfile(models.Model):
         NON_BINARY = 'non_binary', 'Non-binary'
 
     REQUIRED_FIELDS = (
-        'profile_photo', 'bio', 'goal', 'gender', 'date_of_birth', 'location', 'phone',
+        'username', 'profile_photo', 'bio', 'gender', 'date_of_birth', 'location', 'phone',
     )
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='artist_profile')
+    username = models.CharField(
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(USERNAME_PATTERN, 'Use 3-30 lowercase letters, numbers, dots or underscores.')],
+    )
     disciplines = ArrayField(models.CharField(max_length=20, choices=Discipline.choices), default=list, blank=True)
     profile_photo = models.ImageField(upload_to=photo_upload_to, blank=True)
     bio = models.TextField('about yourself', max_length=1000, blank=True)
-    goal = models.CharField('what you want to be', max_length=200, blank=True)
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     height_cm = models.PositiveSmallIntegerField(
@@ -78,7 +91,7 @@ class ArtistProfile(models.Model):
     phone = models.CharField(
         max_length=16,
         blank=True,
-        validators=[RegexValidator(r'^\+[1-9]\d{7,14}$', 'Enter the number with country code, like +919876543210.')],
+        validators=[RegexValidator(r'^\+91[6-9]\d{9}$', 'Enter a 10-digit Indian mobile number.')],
     )
     alt_email = models.EmailField('additional email', blank=True)
     alt_email_verified_at = models.DateTimeField(null=True, blank=True)
@@ -107,8 +120,6 @@ class ArtistProfile(models.Model):
             missing.append('height_cm')
         if not self.languages.exists():
             missing.append('languages')
-        if not self.alt_email_verified_at:
-            missing.append('alt_email')
         return missing
 
     @property
@@ -116,15 +127,22 @@ class ArtistProfile(models.Model):
         return Discipline.ACTOR in self.disciplines
 
     @property
+    def needs_casting_photos(self):
+        # singers, musicians and directors are cast on their work, not their look
+        return bool({Discipline.ACTOR, Discipline.CHOREOGRAPHER} & set(self.disciplines))
+
+    @property
     def onboarding_complete(self):
         return not self.missing_fields
 
     @property
     def completion_percent(self):
-        required_total = len(self.REQUIRED_FIELDS) + 3 + self.needs_height
-        total = required_total + len(PHOTO_SLOTS)
+        required_total = len(self.REQUIRED_FIELDS) + 2 + self.needs_height
+        total = required_total
         done = required_total - len(self.missing_fields)
-        done += sum(1 for slot in PHOTO_SLOTS if getattr(self, f'photo_{slot}'))
+        if self.needs_casting_photos:
+            total += len(PHOTO_SLOTS)
+            done += sum(1 for slot in PHOTO_SLOTS if getattr(self, f'photo_{slot}'))
 
         filled = set(self.media.values_list('discipline', 'slot'))
         for discipline in self.disciplines:
@@ -170,3 +188,18 @@ class PortfolioMedia(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['profile', 'discipline', 'slot'], name='unique_profile_media_slot'),
         ]
+
+
+class ProfileDocument(models.Model):
+    class Kind(models.TextChoices):
+        CERTIFICATE = 'certificate', 'Certificate'
+        ACHIEVEMENT = 'achievement', 'Achievement'
+
+    profile = models.ForeignKey(ArtistProfile, on_delete=models.CASCADE, related_name='documents')
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    title = models.CharField(max_length=120)
+    file = models.FileField(upload_to=document_upload_to)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']

@@ -120,6 +120,10 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
+class SocialExchangeSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=64)
+
+
 class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()

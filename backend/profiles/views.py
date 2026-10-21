@@ -1,10 +1,11 @@
+import re
 import secrets
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -14,15 +15,23 @@ from rest_framework.views import APIView
 from accounts.mail import send_mail_in_background
 from accounts.responses import error_response, ok_response
 
-from .media import process_photo, validate_media
-from .models import LANGUAGES, PHOTO_SLOTS, ArtistProfile, Discipline, PortfolioMedia, ProfileLanguage
-from .serializers import ArtistProfileSerializer, LanguageListSerializer, PinSerializer
+from .media import process_photo, validate_document, validate_media
+from .models import LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, PortfolioMedia, ProfileDocument, ProfileLanguage
+from .serializers import (
+    ArtistProfileSerializer,
+    LanguageListSerializer,
+    PinSerializer,
+    ProfileDocumentSerializer,
+    suggest_usernames,
+    username_taken,
+)
 from .slots import get_slot
 
 User = get_user_model()
 
 PIN_LIFETIME = timedelta(minutes=10)
 PIN_MAX_ATTEMPTS = 5
+DOCUMENT_LIMIT = 20
 
 
 class IsArtist(BasePermission):
@@ -72,6 +81,7 @@ class ProfileOptionsAPIView(APIView):
             'genders': options(ArtistProfile.Gender.choices),
             'languages': options(LANGUAGES),
             'language_levels': options(ProfileLanguage.Level.choices),
+            'document_kinds': options(ProfileDocument.Kind.choices),
         })
 
 
@@ -90,8 +100,29 @@ class ProfileAPIView(ArtistAPIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 field_errors=serializer.errors,
             )
-        serializer.save()
+        try:
+            serializer.save()
+        except IntegrityError:  # someone claimed the same username a moment ago
+            return error_response(
+                request,
+                code='validation_error',
+                message='This username is taken. Try one of the suggestions.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors={'username': ['This username is taken. Try one of the suggestions.']},
+            )
         return self.profile_response(profile, 'Profile saved.')
+
+
+class UsernameCheckAPIView(ArtistAPIView):
+    def get(self, request, *args, **kwargs):
+        wanted = request.query_params.get('username', '').strip().lower()
+        profile = self.get_profile()
+        available = bool(re.match(USERNAME_PATTERN, wanted)) and not username_taken(wanted, profile)
+        return ok_response(request, message='Username checked.', data={
+            'username': wanted,
+            'available': available,
+            'suggestions': [] if available else suggest_usernames(wanted or request.user.first_name, profile),
+        })
 
 
 class LanguagesAPIView(ArtistAPIView):
@@ -187,6 +218,42 @@ class MediaSlotAPIView(ArtistAPIView):
             item.file.delete(save=False)
             item.delete()
         return self.profile_response(profile, 'Upload removed.')
+
+
+class DocumentsAPIView(ArtistAPIView):
+    def post(self, request, *args, **kwargs):
+        profile = self.get_profile()
+        if profile.documents.count() >= DOCUMENT_LIMIT:
+            return error_response(
+                request,
+                code='document_limit',
+                message=f'You can add up to {DOCUMENT_LIMIT} documents. Remove one first.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = ProfileDocumentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                request,
+                code='validation_error',
+                message='Please fix the highlighted fields.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                field_errors=serializer.errors,
+            )
+        try:
+            validate_document(serializer.validated_data['file'])
+        except DjangoValidationError as exc:
+            return self.upload_error(exc)
+        serializer.save(profile=profile)
+        return self.profile_response(profile, 'Document added.')
+
+
+class DocumentAPIView(ArtistAPIView):
+    def delete(self, request, document_id, *args, **kwargs):
+        document = ProfileDocument.objects.filter(profile=self.get_profile(), pk=document_id).first()
+        if document:
+            document.file.delete(save=False)
+            document.delete()
+        return self.profile_response(self.get_profile(), 'Document removed.')
 
 
 class SendAltEmailPinAPIView(ArtistAPIView):

@@ -43,7 +43,9 @@ def check_face(image, kind):
             raise ValidationError(NO_FACE)
         return
 
-    faces = _detect(gray, 'haarcascade_frontalface_default.xml', max(30, width // 10))
+    # the profile photo may be a headshot or a full-body shot, so its face can be small
+    min_size = 20 if kind == 'profile' else max(30, width // 10)
+    faces = _detect(gray, 'haarcascade_frontalface_default.xml', min_size)
     if not faces:
         raise ValidationError(NO_FACE)
     areas = sorted((w * h for _, _, w, h in faces), reverse=True)

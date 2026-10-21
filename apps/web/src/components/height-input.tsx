@@ -30,7 +30,7 @@ export function HeightInput({ value, onChange, error }: { value: number | null; 
   };
 
   return (
-    <Field label="Height" error={error} hint={value ? `${value} cm` : undefined}>
+    <Field label="Height" error={error}>
       <div className="flex gap-2">
         {unit === 'cm' ? (
           <input

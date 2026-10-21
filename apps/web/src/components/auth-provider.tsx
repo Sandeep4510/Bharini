@@ -19,6 +19,7 @@ export type AuthContextValue = {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  loginWithSocialCode: (code: string) => Promise<AuthUser>;
   register: (payload: {
     email: string;
     first_name: string;
@@ -125,6 +126,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return nextUser as AuthUser;
   }, [persistTokens]);
 
+  const loginWithSocialCode = useCallback(async (code: string) => {
+    const response = await apiClient.exchangeSocialCode(code);
+    const tokens = response.data?.tokens;
+    if (!tokens?.access || !tokens.refresh) {
+      throw new Error(response.message || 'Sign-in failed.');
+    }
+    persistTokens(tokens);
+    setUser(response.data?.user ?? null);
+    return response.data?.user as AuthUser;
+  }, [persistTokens]);
+
   const register = useCallback(async (payload: {
     email: string;
     first_name: string;
@@ -165,11 +177,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     isLoading,
     isAuthenticated: Boolean(user || readSession().accessToken),
     login,
+    loginWithSocialCode,
     register,
     logout,
     refreshSession,
     hydrate,
-  }), [hydrate, isLoading, login, logout, refreshSession, register, user]);
+  }), [hydrate, isLoading, login, loginWithSocialCode, logout, refreshSession, register, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

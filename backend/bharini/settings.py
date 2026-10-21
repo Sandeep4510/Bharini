@@ -122,8 +122,14 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
     'accounts',
     'profiles',
+    'posts',
 ]
 
 MIDDLEWARE = [
@@ -135,7 +141,39 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+# Social login (django-allauth). Email/password stays on our JWT API; allauth only runs the
+# Google/Facebook OAuth dance, then accounts.views.SocialCompleteView hands the frontend JWTs.
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+ACCOUNT_EMAIL_VERIFICATION = 'none'  # providers below only return verified emails
+LOGIN_REDIRECT_URL = '/api/v1/auth/social/complete/'
+SOCIALACCOUNT_ADAPTER = 'accounts.social.SocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_LOGIN_ON_GET = True  # the frontend links straight to the provider start URL
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True  # Google login with an existing email signs into that account
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': ['profile', 'email'],
+        'APPS': [{'client_id': os.getenv('GOOGLE_CLIENT_ID', ''), 'secret': os.getenv('GOOGLE_CLIENT_SECRET', '')}]
+        if os.getenv('GOOGLE_CLIENT_ID') else [],
+    },
+    'facebook': {
+        'SCOPE': ['email', 'public_profile'],
+        'FIELDS': ['id', 'email', 'first_name', 'last_name'],
+        'APPS': [{'client_id': os.getenv('FACEBOOK_APP_ID', ''), 'secret': os.getenv('FACEBOOK_APP_SECRET', '')}]
+        if os.getenv('FACEBOOK_APP_ID') else [],
+    },
+}
 
 ROOT_URLCONF = 'bharini.urls'
 

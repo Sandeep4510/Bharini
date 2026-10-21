@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { apiClient } from "@bharini/api-client";
+
 export function AuthShell({
   title,
   subtitle,
@@ -116,5 +118,43 @@ export function AuthButton({
     >
       {children}
     </button>
+  );
+}
+
+export function ShowPasswordToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-slate-600 bg-slate-950"
+      />
+      Show password
+    </label>
+  );
+}
+
+const socialButton =
+  "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800";
+
+/** Full-page links into django-allauth; the backend sends the browser back to /auth/social. */
+export function SocialButtons({ role }: { role?: string }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+        <span className="h-px flex-1 bg-slate-800" />
+        or
+        <span className="h-px flex-1 bg-slate-800" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <a href={apiClient.socialLoginUrl("google", role)} className={socialButton}>
+          <span className="font-bold text-sky-300">G</span> Continue with Google
+        </a>
+        <a href={apiClient.socialLoginUrl("facebook", role)} className={socialButton}>
+          <span className="font-bold text-blue-400">f</span> Continue with Facebook
+        </a>
+      </div>
+    </div>
   );
 }

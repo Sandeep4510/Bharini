@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { apiClient } from '@bharini/api-client';
+import { ApiError, apiClient } from '@bharini/api-client';
 
 import { AuthButton, AuthInput, AuthShell } from '@/components/auth-shell';
 
@@ -12,11 +12,13 @@ export default function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [notFound, setNotFound] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage('');
     setError('');
+    setNotFound(false);
     setIsSubmitting(true);
 
     try {
@@ -24,6 +26,7 @@ export default function ForgotPasswordPage() {
       setMessage(response.message || 'Reset instructions sent.');
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Could not send reset email');
+      setNotFound(caughtError instanceof ApiError && caughtError.status === 404);
     } finally {
       setIsSubmitting(false);
     }
@@ -43,6 +46,14 @@ export default function ForgotPasswordPage() {
         {error ? (
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
+            {notFound ? (
+              <>
+                {' '}
+                <Link href="/auth/register" className="font-medium text-violet-300 underline hover:text-violet-200">
+                  Create an account
+                </Link>
+              </>
+            ) : null}
           </div>
         ) : null}
 

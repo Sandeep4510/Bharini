@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 
 import type { ArtistProfile, ProfileOptions } from '@bharini/types';
 
+import { AppHeader } from '@/components/app-header';
 import { useAuth } from '@/components/auth-provider';
 import { CompletionBar } from '@/components/completion-bar';
 import { PortfolioEditor } from '@/components/portfolio-editor';
@@ -48,7 +49,7 @@ function ProfileHeader({ profile, options, name }: { profile: ArtistProfile; opt
           ))}
         </div>
         <h1 className="mt-2 text-3xl font-semibold text-white">{name}</h1>
-        <p className="mt-1 text-slate-300">{profile.goal}</p>
+        {profile.username ? <p className="mt-1 text-slate-300">@{profile.username}</p> : null}
         <p className="mt-2 text-sm text-slate-400">{facts.join(' · ')}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {profile.languages.map((item) => (
@@ -67,32 +68,19 @@ function ProfileHeader({ profile, options, name }: { profile: ArtistProfile; opt
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { profile, setProfile, options, notArtist, error } = useArtistProfile();
 
   useEffect(() => {
     if (profile && !profile.onboarding_complete) router.replace('/onboarding');
   }, [profile, router]);
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/auth/login');
-  };
-
   const name = user ? `${user.first_name} ${user.last_name}` : '';
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">B</span>
-            <span>Bharini</span>
-          </Link>
-          <button type="button" onClick={() => void handleLogout()} className={secondaryButton}>
-            Logout
-          </button>
-        </header>
+        <AppHeader />
 
         {error ? <ErrorBanner message={error} /> : null}
 

@@ -19,7 +19,7 @@ from rest_framework.test import APIClient
 
 from accounts.mail import _send
 from profiles.face import check_face
-from profiles.models import ArtistProfile, PortfolioMedia
+from profiles.models import ArtistProfile, PortfolioMedia, ProfileDocument
 
 User = get_user_model()
 
@@ -78,23 +78,19 @@ class ProfileApiTests(TestCase):
 
     def complete_required_fields(self):
         response = self.client.patch('/api/v1/profile/', {
+            'username': 'Asha.Rao',
             'disciplines': ['actor'],
             'profile_photo': make_image(),
             'bio': 'Theatre actor from Mangaluru.',
-            'goal': 'Lead roles in Kannada cinema',
             'gender': 'female',
             'date_of_birth': '1998-04-12',
             'height_cm': 165,
             'location': 'Mangaluru, Karnataka',
             'phone': '+919876543210',
-            'alt_email': 'asha.alt@example.com',
         }, format='multipart')
         self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['username'], 'asha.rao')
         self.client.put('/api/v1/profile/languages/', {'languages': [{'language': 'kannada', 'level': 'native'}]}, format='json')
-        self.client.post('/api/v1/profile/alt-email/send-pin/')
-        profile = ArtistProfile.objects.get(user=self.user)
-        profile.alt_email_verified_at = timezone.now()
-        profile.save()
 
     def test_required_fields_drive_onboarding_complete(self, check_face_mock):
         response = self.client.get('/api/v1/profile/')
@@ -109,8 +105,55 @@ class ProfileApiTests(TestCase):
         self.assertEqual([section['discipline'] for section in data['media_slots']], ['actor'])
         self.assertEqual(len(data['media_slots'][0]['slots']), 9)
 
+        self.client.force_authenticate(User.objects.get(pk=self.user.pk))  # drop the stale cached artist_profile
         me = self.client.get('/api/v1/auth/me/').data['data']
         self.assertTrue(me['onboarding_complete'])
+
+    def test_phone_must_be_indian_mobile(self, check_face_mock):
+        for phone in ('+14155550123', '+91123456789', '+9198765432101', '9876543210'):
+            response = self.client.patch('/api/v1/profile/', {'phone': phone}, format='json')
+            self.assertEqual(response.status_code, 400, phone)
+        response = self.client.patch('/api/v1/profile/', {'phone': '+919876543210'}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+    def test_username_unique_with_suggestions(self, check_face_mock):
+        other = User.objects.create_user(
+            email='other@example.com', first_name='Ravi', last_name='K', password='StrongPass123!', role='artist',
+        )
+        ArtistProfile.objects.create(user=other, username='asha')
+
+        response = self.client.patch('/api/v1/profile/', {'username': 'ASHA'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('username', response.data['field_errors'])
+        response = self.client.patch('/api/v1/profile/', {'username': 'a b'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        data = self.client.get('/api/v1/profile/username-check/?username=Asha').data['data']
+        self.assertFalse(data['available'])
+        self.assertTrue(data['suggestions'])
+        self.assertNotIn('asha', data['suggestions'])
+        for suggestion in data['suggestions']:
+            self.assertEqual(self.client.patch('/api/v1/profile/', {'username': suggestion}, format='json').status_code, 200)
+
+        data = self.client.get('/api/v1/profile/username-check/?username=asha_new').data['data']
+        self.assertTrue(data['available'])
+
+    def test_documents_upload_validate_and_delete(self, check_face_mock):
+        pdf = SimpleUploadedFile('award.pdf', b'%PDF-1.4 test', content_type='application/pdf')
+        response = self.client.post('/api/v1/profile/documents/', {'kind': 'certificate', 'title': 'Diploma', 'file': pdf}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['documents'][0]['title'], 'Diploma')
+
+        fake = SimpleUploadedFile('fake.pdf', b'MZ not a pdf', content_type='application/pdf')
+        response = self.client.post('/api/v1/profile/documents/', {'kind': 'achievement', 'title': 'Award', 'file': fake}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        response = self.client.post('/api/v1/profile/documents/', {'kind': 'achievement', 'title': 'Award', 'file': make_image('award.png')}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        document = ProfileDocument.objects.get(title='Diploma')
+        response = self.client.delete(f'/api/v1/profile/documents/{document.pk}/')
+        self.assertEqual([item['title'] for item in response.data['data']['documents']], ['Award'])
+        self.assertFalse(document.file.storage.exists(document.file.name))
 
     def test_height_required_only_for_actors(self, check_face_mock):
         data = self.client.patch('/api/v1/profile/', {'disciplines': ['singer']}, format='json').data['data']
@@ -172,10 +215,10 @@ class ProfileApiTests(TestCase):
 
         response = self.client.put('/api/v1/profile/media/actor/love/', {'file': make_video(5)}, format='multipart')
         self.assertEqual(response.status_code, 200, response.data)
-        first_name = PortfolioMedia.objects.get(slot='love').file.name
+        first_name = PortfolioMedia.objects.get(profile__user=self.user, slot='love').file.name
 
         self.client.put('/api/v1/profile/media/actor/love/', {'file': make_video(4)}, format='multipart')
-        item = PortfolioMedia.objects.get(slot='love')
+        item = PortfolioMedia.objects.get(profile__user=self.user, slot='love')
         self.assertFalse(item.file.storage.exists(first_name))
 
         response = self.client.put('/api/v1/profile/media/musician/audio_1/', {'file': make_audio(181)}, format='multipart')
@@ -200,7 +243,7 @@ class ProfileApiTests(TestCase):
         response = self.client.post('/api/v1/profile/alt-email/send-pin/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mail.outbox[-1].to, ['asha.alt@example.com'])
-        pin = next(word for word in mail.outbox[-1].body.split() if word.isdigit() and len(word) == 6)
+        pin = next(word for word in mail.outbox[-1].body.split() if word.strip('.').isdigit() and len(word.strip('.')) == 6).strip('.')
 
         wrong = '000000' if pin != '000000' else '111111'
         response = self.client.post('/api/v1/profile/alt-email/verify/', {'pin': wrong}, format='json')
@@ -213,7 +256,7 @@ class ProfileApiTests(TestCase):
         self.assertEqual(response.data['code'], 'pin_expired')
 
         self.client.post('/api/v1/profile/alt-email/send-pin/')
-        pin = next(word for word in mail.outbox[-1].body.split() if word.isdigit() and len(word) == 6)
+        pin = next(word for word in mail.outbox[-1].body.split() if word.strip('.').isdigit() and len(word.strip('.')) == 6).strip('.')
         profile.refresh_from_db()
         profile.alt_email_pin_attempts = 5
         profile.save()
@@ -221,7 +264,7 @@ class ProfileApiTests(TestCase):
         self.assertEqual(response.data['code'], 'pin_expired')
 
         self.client.post('/api/v1/profile/alt-email/send-pin/')
-        pin = next(word for word in mail.outbox[-1].body.split() if word.isdigit() and len(word) == 6)
+        pin = next(word for word in mail.outbox[-1].body.split() if word.strip('.').isdigit() and len(word.strip('.')) == 6).strip('.')
         response = self.client.post('/api/v1/profile/alt-email/verify/', {'pin': pin}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['data']['alt_email_verified'])

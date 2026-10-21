@@ -10,7 +10,10 @@ from .views import (
     RegisterAPIView,
     SessionListAPIView,
     SessionRevokeAPIView,
+    SocialExchangeAPIView,
     VerifyEmailAPIView,
+    social_complete,
+    social_start,
 )
 
 urlpatterns = [
@@ -22,6 +25,9 @@ urlpatterns = [
     path('verify/', VerifyEmailAPIView.as_view(), name='auth-verify'),
     path('password/reset/', PasswordResetRequestAPIView.as_view(), name='auth-password-reset-request'),
     path('password/reset/confirm/', PasswordResetConfirmAPIView.as_view(), name='auth-password-reset-confirm'),
+    path('social/<str:provider>/start/', social_start, name='auth-social-start'),
+    path('social/complete/', social_complete, name='auth-social-complete'),
+    path('social/exchange/', SocialExchangeAPIView.as_view(), name='auth-social-exchange'),
     path('me/', MeAPIView.as_view(), name='auth-me'),
     path('sessions/', SessionListAPIView.as_view(), name='auth-sessions'),
     path('sessions/<uuid:session_id>/revoke/', SessionRevokeAPIView.as_view(), name='auth-session-revoke'),

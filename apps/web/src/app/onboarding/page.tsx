@@ -1,18 +1,19 @@
 /* eslint-disable @next/next/no-img-element -- previews are local object URLs or API-hosted uploads */
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { apiClient } from '@bharini/api-client';
 import type { ArtistProfile, Discipline, LanguageLevel, ProfileLanguage, ProfileOptions } from '@bharini/types';
 
+import { useAuth } from '@/components/auth-provider';
 import { AuthInput } from '@/components/auth-shell';
 import { CompletionBar } from '@/components/completion-bar';
 import { DisciplinePicker } from '@/components/discipline-picker';
 import { DateOfBirthInput } from '@/components/dob-input';
 import { HeightInput } from '@/components/height-input';
+import { AppHeader } from '@/components/app-header';
 import { PortfolioEditor } from '@/components/portfolio-editor';
 import {
   ErrorBanner,
@@ -24,16 +25,19 @@ import {
   fieldErrorsFrom,
   inputClass,
   okBorder,
+  onLeave,
   primaryButton,
   secondaryButton,
 } from '@/components/profile-fields';
+import { USERNAME_PATTERN, UsernameInput } from '@/components/username-input';
 import { useArtistProfile } from '@/components/use-artist-profile';
+import { INDIAN_CITIES } from '@/lib/indian-cities';
 
 const STEPS = ['About you', 'Languages', 'Contact', 'Portfolio'];
 const STEP_FIELDS = [
-  ['disciplines', 'profile_photo', 'bio', 'goal', 'gender', 'date_of_birth', 'height_cm'],
+  ['username', 'disciplines', 'profile_photo', 'bio', 'gender', 'date_of_birth', 'height_cm'],
   ['languages'],
-  ['location', 'phone', 'alt_email'],
+  ['location', 'phone'],
 ];
 
 function firstIncompleteStep(profile: ArtistProfile) {
@@ -66,11 +70,11 @@ function StepActions({ busy, label = 'Save & continue', onBack }: { busy: boolea
 }
 
 function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
+  const [username, setUsername] = useState(profile.username ?? '');
   const [disciplines, setDisciplines] = useState<Discipline[]>(profile.disciplines);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState(profile.profile_photo ?? '');
   const [bio, setBio] = useState(profile.bio);
-  const [goal, setGoal] = useState(profile.goal);
   const [gender, setGender] = useState<string>(profile.gender);
   const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth ?? '');
   const [heightCm, setHeightCm] = useState(profile.height_cm);
@@ -87,25 +91,32 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
     setErrors((previous) => ({ ...previous, profile_photo: '' }));
   };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const validate = () => {
     const clientErrors: Record<string, string> = {};
+    if (!username) clientErrors.username = 'Choose a username.';
+    else if (!USERNAME_PATTERN.test(username)) clientErrors.username = 'Use 3-30 lowercase letters, numbers, dots or underscores.';
     if (!disciplines.length) clientErrors.disciplines = 'Pick at least one.';
-    if (!photo && !profile.profile_photo) clientErrors.profile_photo = 'Add a clear photo of your face.';
+    if (!photo && !profile.profile_photo) clientErrors.profile_photo = 'Add a clear photo of yourself.';
     if (!bio.trim()) clientErrors.bio = 'Tell casting teams a little about yourself.';
-    if (!goal.trim()) clientErrors.goal = 'What do you want to become?';
     if (!gender) clientErrors.gender = 'Choose one.';
     if (!dateOfBirth) clientErrors.date_of_birth = 'Enter your date of birth.';
     if (isActor && !heightCm) clientErrors.height_cm = 'Enter your height.';
+    return clientErrors;
+  };
+  const check = (field: string) => setErrors((previous) => ({ ...previous, [field]: validate()[field] ?? '' }));
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const clientErrors = validate();
     setErrors(clientErrors);
     setError('');
     if (Object.keys(clientErrors).length) return;
 
     const body = new FormData();
+    body.append('username', username);
     disciplines.forEach((discipline) => body.append('disciplines', discipline));
     if (photo) body.append('profile_photo', photo);
     body.append('bio', bio.trim());
-    body.append('goal', goal.trim());
     body.append('gender', gender);
     body.append('date_of_birth', dateOfBirth);
     if (isActor && heightCm) body.append('height_cm', String(heightCm));
@@ -126,9 +137,18 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
   return (
     <form className="space-y-5" onSubmit={submit} noValidate>
       <ErrorBanner message={error} />
-      <DisciplinePicker options={options.disciplines} value={disciplines} onChange={setDisciplines} error={errors.disciplines} />
+      <UsernameInput
+        value={username}
+        savedValue={profile.username ?? ''}
+        onChange={setUsername}
+        error={errors.username}
+        onError={(message) => setErrors((previous) => ({ ...previous, username: message }))}
+      />
+      <div onBlur={onLeave(() => check('disciplines'))}>
+        <DisciplinePicker options={options.disciplines} value={disciplines} onChange={setDisciplines} error={errors.disciplines} />
+      </div>
 
-      <Field label="Profile photo" error={errors.profile_photo} hint="A real, recent photo of your face. We check that a face is visible.">
+      <Field label="Profile photo" error={errors.profile_photo} hint="A real, recent photo of you: a headshot or a full-body shot. We check that your face is visible.">
         <div className="flex items-center gap-4">
           <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-950/70 text-3xl text-slate-600">
             {photoPreview ? <img src={photoPreview} alt="Profile preview" className="h-full w-full object-cover" /> : '👤'}
@@ -140,14 +160,23 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
         </div>
       </Field>
 
-      <TextAreaField label="About yourself" value={bio} onChange={setBio} maxLength={1000} placeholder="Training, experience, theatre, notable work…" error={errors.bio} />
-      <AuthInput label="What do you want to be?" placeholder="e.g. Lead actor in Kannada films, playback singer" value={goal} onChange={setGoal} error={errors.goal} />
+      <div onBlur={onLeave(() => check('bio'))}>
+        <TextAreaField label="About yourself" value={bio} onChange={setBio} maxLength={1000} placeholder="Training, experience, theatre, notable work…" error={errors.bio} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
-        <SelectField label="Sex" value={gender} onChange={setGender} options={options.genders} placeholder="Select" error={errors.gender} />
-        <DateOfBirthInput value={dateOfBirth} onChange={setDateOfBirth} error={errors.date_of_birth} />
+        <div onBlur={onLeave(() => check('gender'))}>
+          <SelectField label="Sex" value={gender} onChange={setGender} options={options.genders} placeholder="Select" error={errors.gender} />
+        </div>
+        <div onBlur={onLeave(() => check('date_of_birth'))}>
+          <DateOfBirthInput value={dateOfBirth} onChange={setDateOfBirth} error={errors.date_of_birth} />
+        </div>
       </div>
-      {isActor ? <HeightInput value={heightCm} onChange={setHeightCm} error={errors.height_cm} /> : null}
+      {isActor ? (
+        <div onBlur={onLeave(() => check('height_cm'))}>
+          <HeightInput value={heightCm} onChange={setHeightCm} error={errors.height_cm} />
+        </div>
+      ) : null}
 
       <StepActions busy={busy} />
     </form>
@@ -215,11 +244,6 @@ function LanguagesStep({ profile, options, onProfile, onNext, onBack }: StepProp
   );
 }
 
-function normalizePhone(value: string) {
-  const compact = value.replace(/[\s()-]/g, '');
-  return /^\d{10}$/.test(compact) ? `+91${compact}` : compact;
-}
-
 function normalizeSocial(value: string, host: string) {
   const trimmed = value.trim();
   if (!trimmed || /^https?:\/\//i.test(trimmed)) return trimmed;
@@ -227,9 +251,17 @@ function normalizeSocial(value: string, host: string) {
   return `https://${host}/${trimmed.replace(/^@/, '')}`;
 }
 
+function hostOf(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
 function ContactStep({ profile, onProfile, onNext, onBack }: StepProps & { onBack: () => void }) {
   const [location, setLocation] = useState(profile.location);
-  const [phone, setPhone] = useState(profile.phone);
+  const [phone, setPhone] = useState(profile.phone.replace(/^\+91/, ''));
   const [altEmail, setAltEmail] = useState(profile.alt_email);
   const [pin, setPin] = useState('');
   const [pinSentTo, setPinSentTo] = useState('');
@@ -276,19 +308,33 @@ function ContactStep({ profile, onProfile, onNext, onBack }: StepProps & { onBac
       setPinSentTo('');
     });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const validate = () => {
     const clientErrors: Record<string, string> = {};
     if (!location.trim()) clientErrors.location = 'Enter your city.';
-    if (!phone.trim()) clientErrors.phone = 'Enter your phone number.';
-    if (!verified) clientErrors.alt_email = 'Verify your additional email with the PIN.';
+    if (!phone) clientErrors.phone = 'Enter your mobile number.';
+    else if (!/^[6-9]\d{9}$/.test(phone)) clientErrors.phone = 'Enter a 10-digit Indian mobile number starting with 6, 7, 8 or 9.';
+    if (altEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(altEmail.trim())) clientErrors.alt_email = 'Enter a valid email, like you.work@example.com.';
+    if (instagram.trim() && !/(^|\.)instagram\.com$/i.test(hostOf(normalizeSocial(instagram, 'instagram.com')))) {
+      clientErrors.instagram_url = 'Enter your Instagram profile, like instagram.com/yourname or @yourname.';
+    }
+    if (facebook.trim() && !/(^|\.)(facebook|fb)\.com$/i.test(hostOf(normalizeSocial(facebook, 'facebook.com')))) {
+      clientErrors.facebook_url = 'Enter your Facebook profile, like facebook.com/yourname.';
+    }
+    return clientErrors;
+  };
+  const check = (field: string) => setErrors((previous) => ({ ...previous, [field]: validate()[field] ?? '' }));
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const clientErrors = validate();
     setErrors(clientErrors);
     if (Object.keys(clientErrors).length) return;
 
     void attempt('save', async () => {
       const response = await apiClient.updateProfile({
         location: location.trim(),
-        phone: normalizePhone(phone),
+        phone: `+91${phone}`,
+        alt_email: altEmail.trim(),
         instagram_url: normalizeSocial(instagram, 'instagram.com'),
         facebook_url: normalizeSocial(facebook, 'facebook.com'),
       });
@@ -304,17 +350,40 @@ function ContactStep({ profile, onProfile, onNext, onBack }: StepProps & { onBac
         <input
           value={location}
           maxLength={100}
-          autoComplete="address-level2"
-          placeholder="City, State (e.g. Mangaluru, Karnataka)"
+          list="indian-cities"
+          autoComplete="off"
+          placeholder="Start typing your city (e.g. Mangaluru)"
           onChange={(event) => setLocation(event.target.value)}
+          onBlur={() => check('location')}
           aria-invalid={errors.location ? true : undefined}
           className={`${inputClass} ${errors.location ? errorBorder : okBorder}`}
         />
+        <datalist id="indian-cities">
+          {INDIAN_CITIES.map((city) => (
+            <option key={city} value={city} />
+          ))}
+        </datalist>
       </Field>
-      <AuthInput label="Phone number" type="tel" placeholder="+91 98765 43210" value={phone} onChange={setPhone} error={errors.phone} />
+      <Field label="Mobile number" error={errors.phone} hint="Indian mobile numbers only.">
+        <div className="flex">
+          <span className="inline-flex items-center rounded-l-xl border border-r-0 border-slate-700 bg-slate-900 px-3 text-slate-300">+91</span>
+          <input
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            maxLength={10}
+            placeholder="98765 43210"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value.replace(/\D/g, '').slice(0, 10))}
+            onBlur={() => check('phone')}
+            aria-invalid={errors.phone ? true : undefined}
+            className={`${inputClass} ${errors.phone ? errorBorder : okBorder} rounded-l-none`}
+          />
+        </div>
+      </Field>
 
-      <Field label="Additional email" error={errors.alt_email} hint="A backup email casting teams can reach you on. Must be different from your login email.">
-        <div className="flex gap-2">
+      <Field label="Additional email (optional)" error={errors.alt_email} hint="A backup email casting teams can reach you on. Must be different from your login email. Verify it with a PIN.">
+        <div className="flex gap-2" onBlur={onLeave(() => check('alt_email'))}>
           <input
             type="email"
             value={altEmail}
@@ -357,8 +426,12 @@ function ContactStep({ profile, onProfile, onNext, onBack }: StepProps & { onBac
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <AuthInput label="Instagram (optional)" placeholder="instagram.com/yourname or @yourname" value={instagram} onChange={setInstagram} error={errors.instagram_url} />
-        <AuthInput label="Facebook (optional)" placeholder="facebook.com/yourname" value={facebook} onChange={setFacebook} error={errors.facebook_url} />
+        <div onBlur={onLeave(() => check('instagram_url'))}>
+          <AuthInput label="Instagram (optional)" placeholder="instagram.com/yourname or @yourname" value={instagram} onChange={setInstagram} error={errors.instagram_url} />
+        </div>
+        <div onBlur={onLeave(() => check('facebook_url'))}>
+          <AuthInput label="Facebook (optional)" placeholder="facebook.com/yourname" value={facebook} onChange={setFacebook} error={errors.facebook_url} />
+        </div>
       </div>
 
       <StepActions busy={busy === 'save'} onBack={onBack} />
@@ -368,11 +441,12 @@ function ContactStep({ profile, onProfile, onNext, onBack }: StepProps & { onBac
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { hydrate } = useAuth();
   const { profile, setProfile, options, notArtist, error } = useArtistProfile();
   const [chosenStep, setChosenStep] = useState<number | null>(null);
 
   useEffect(() => {
-    if (notArtist) router.replace('/dashboard');
+    if (notArtist) router.replace('/home');
   }, [notArtist, router]);
 
   if (!profile || !options) {
@@ -394,16 +468,8 @@ export default function OnboardingPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">B</span>
-            <span>Bharini</span>
-          </Link>
-          {profile.onboarding_complete ? (
-            <Link href="/dashboard" className="text-sm text-slate-300 hover:text-white">
-              Go to dashboard →
-            </Link>
-          ) : null}
+        <div className="mb-6">
+          <AppHeader />
         </div>
 
         <p className="text-sm uppercase tracking-[0.16em] text-violet-300">Set up your profile</p>
@@ -443,7 +509,7 @@ export default function OnboardingPage() {
                 <button type="button" onClick={() => goTo(2)} className={secondaryButton}>
                   Back
                 </button>
-                <button type="button" disabled={!profile.onboarding_complete} onClick={() => router.push('/dashboard')} className={primaryButton}>
+                <button type="button" disabled={!profile.onboarding_complete} onClick={() => void hydrate().then(() => router.push('/home'))} className={primaryButton}>
                   {profile.completion_percent < 100 ? 'Skip for now' : 'Finish'}
                 </button>
               </div>

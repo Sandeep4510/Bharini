@@ -36,7 +36,8 @@ def process_photo(upload, face_kind):
 
     image = ImageOps.exif_transpose(image).convert('RGB')
     image.thumbnail((IMAGE_MAX_SIDE, IMAGE_MAX_SIDE))
-    check_face(image.copy(), face_kind)
+    if face_kind:
+        check_face(image.copy(), face_kind)
 
     output = BytesIO()
     image.save(output, format='JPEG', quality=88, optimize=True)
@@ -110,3 +111,28 @@ def validate_media(upload, slot):
             f'This clip is {duration:.1f} seconds long; the limit is {_format_seconds(slot["max_seconds"])}.'
         )
     return round(duration, 2)
+
+
+DOCUMENT_MAX_BYTES = 10 * MB
+DOCUMENT_EXTS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp'}
+
+
+def validate_document(upload):
+    """Certificates: a real PDF (by magic bytes) or a real image (opened by Pillow)."""
+    suffix = Path(upload.name).suffix.lower()
+    if suffix not in DOCUMENT_EXTS:
+        raise ValidationError('Upload a PDF, JPG, PNG or WebP file.')
+    if upload.size > DOCUMENT_MAX_BYTES:
+        raise ValidationError('File is too large (max 10 MB).')
+    upload.seek(0)
+    if suffix == '.pdf':
+        valid = upload.read(5) == b'%PDF-'
+    else:
+        try:
+            Image.open(upload).verify()
+            valid = True
+        except (UnidentifiedImageError, Image.DecompressionBombError, OSError):
+            valid = False
+    upload.seek(0)
+    if not valid:
+        raise ValidationError('This file is damaged or not what its name says.')
