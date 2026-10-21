@@ -48,6 +48,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    onboarding_complete = serializers.SerializerMethodField()
+    completion_percent = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -59,8 +62,20 @@ class UserSerializer(serializers.ModelSerializer):
             'is_verified',
             'email_verified_at',
             'date_joined',
+            'onboarding_complete',
+            'completion_percent',
         )
         read_only_fields = fields
+
+    def get_onboarding_complete(self, obj):
+        if obj.role != User.Roles.ARTIST:
+            return True
+        profile = getattr(obj, 'artist_profile', None)
+        return bool(profile and profile.onboarding_complete)
+
+    def get_completion_percent(self, obj):
+        profile = getattr(obj, 'artist_profile', None)
+        return profile.completion_percent if profile else None
 
 
 class LoginSerializer(serializers.Serializer):

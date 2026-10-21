@@ -21,8 +21,8 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
-      router.push('/dashboard');
+      const user = await login(email, password);
+      router.push(user.role === 'artist' && !user.onboarding_complete ? '/onboarding' : '/dashboard');
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Login failed');
     } finally {

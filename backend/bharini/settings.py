@@ -95,6 +95,7 @@ REST_FRAMEWORK = {
         'auth_logout': '20/minute',
         'auth_verify': '20/minute',
         'auth_password_reset': '5/minute',
+        'profile_pin': '5/minute',
     },
 }
 
@@ -116,11 +117,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'accounts',
+    'profiles',
 ]
 
 MIDDLEWARE = [
@@ -208,6 +211,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Uploaded media. Local disk for now; point STORAGES['default'] at GCS (django-storages) later.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Email

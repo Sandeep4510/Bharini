@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
@@ -70,6 +71,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // restore the signed-in user after a page reload
+  useEffect(() => {
+    if (!readSession().accessToken) return;
+    let cancelled = false;
+    apiClient
+      .me()
+      .then((response) => {
+        if (!cancelled) setUser(response.data ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refreshSession = useCallback(async () => {

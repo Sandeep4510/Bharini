@@ -1,5 +1,13 @@
 import { clearSession, readSession, saveSession } from '@bharini/auth';
-import type { ApiEnvelope, AuthUser, TokenPair } from '@bharini/types';
+import type {
+  ApiEnvelope,
+  ArtistProfile,
+  AuthUser,
+  PhotoSlot,
+  ProfileLanguage,
+  ProfileOptions,
+  TokenPair,
+} from '@bharini/types';
 
 export type ApiClientOptions = {
   baseUrl?: string;
@@ -11,7 +19,7 @@ export type ApiClientOptions = {
 export type AuthApiResponse<T> = ApiEnvelope<T>;
 
 export class ApiError extends Error {
-  constructor(message: string, public fieldErrors: Record<string, string[]> = {}) {
+  constructor(message: string, public fieldErrors: Record<string, string[]> = {}, public status = 0) {
     super(message);
   }
 }
@@ -64,7 +72,10 @@ export class ApiClient {
 
   private async requestInternal<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
     const headers = new Headers(init.headers ?? {});
-    headers.set('Content-Type', 'application/json');
+    // FormData needs the browser to set its own multipart boundary
+    if (!(init.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
 
     const publicAuthEndpoint = this.isPublicAuthEndpoint(path);
     if (this.accessToken && !publicAuthEndpoint) {
@@ -96,8 +107,8 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      const message = typeof payload === 'string' ? payload : payload?.message || 'Request failed';
-      throw new ApiError(message, typeof payload === 'string' ? {} : payload?.field_errors);
+      const message = typeof payload === 'string' ? payload : payload?.message || payload?.detail || 'Request failed';
+      throw new ApiError(message, typeof payload === 'string' ? {} : payload?.field_errors, response.status);
     }
 
     return payload as T;
@@ -164,6 +175,59 @@ export class ApiClient {
     return this.request<AuthApiResponse<null>>('/api/v1/auth/password/reset/confirm/', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  }
+
+  getProfile() {
+    return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/');
+  }
+
+  getProfileOptions() {
+    return this.request<AuthApiResponse<ProfileOptions>>('/api/v1/profile/options/');
+  }
+
+  updateProfile(payload: FormData | Record<string, unknown>) {
+    return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/', {
+      method: 'PATCH',
+      body: payload instanceof FormData ? payload : JSON.stringify(payload),
+    });
+  }
+
+  setLanguages(languages: ProfileLanguage[]) {
+    return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/languages/', {
+      method: 'PUT',
+      body: JSON.stringify({ languages }),
+    });
+  }
+
+  uploadPhoto(slot: PhotoSlot, file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/photos/${slot}/`, { method: 'PUT', body });
+  }
+
+  deletePhoto(slot: PhotoSlot) {
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/photos/${slot}/`, { method: 'DELETE' });
+  }
+
+  uploadMedia(discipline: string, slot: string, file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, { method: 'PUT', body });
+  }
+
+  deleteMedia(discipline: string, slot: string) {
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, { method: 'DELETE' });
+  }
+
+  sendAltEmailPin() {
+    return this.request<AuthApiResponse<null>>('/api/v1/profile/alt-email/send-pin/', { method: 'POST' });
+  }
+
+  verifyAltEmailPin(pin: string) {
+    return this.request<AuthApiResponse<ArtistProfile>>('/api/v1/profile/alt-email/verify/', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
     });
   }
 }

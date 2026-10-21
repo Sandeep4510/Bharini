@@ -5,19 +5,19 @@ from uuid import UUID
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError, UntypedToken
 
+from .mail import send_mail_in_background
 from .models import RefreshSession
+from .responses import error_response, ok_response
 from .serializers import (
     CookieTokenRefreshSerializer,
     LoginSerializer,
@@ -30,32 +30,6 @@ from .serializers import (
 )
 
 User = get_user_model()
-
-
-def request_id(request):
-    return request.headers.get('X-Request-ID', '')
-
-
-def ok_response(request, message, data=None, status_code=status.HTTP_200_OK):
-    payload = {
-        'code': 'ok',
-        'message': message,
-        'request_id': request_id(request),
-    }
-    if data is not None:
-        payload['data'] = data
-    return Response(payload, status=status_code)
-
-
-def error_response(request, code, message, status_code, field_errors=None):
-    payload = {
-        'code': code,
-        'message': message,
-        'request_id': request_id(request),
-    }
-    if field_errors:
-        payload['field_errors'] = field_errors
-    return Response(payload, status=status_code)
 
 
 def hash_jti(jti):
@@ -153,16 +127,14 @@ class RegisterAPIView(APIView):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         verification_link = f"{settings.FRONTEND_URL}/auth/verify-email?uid={uid}&token={token}"
-        send_mail(
+        send_mail_in_background(
             subject='Verify your Bharini account',
             message=(
                 f"Hi {user.first_name or user.email},\n\n"
                 f"Please verify your email by visiting: {verification_link}\n\n"
                 'If you did not create this account, you can ignore this email.'
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
+            recipient=user.email,
         )
 
         response = ok_response(
@@ -352,16 +324,14 @@ class PasswordResetRequestAPIView(APIView):
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
             reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
-            send_mail(
+            send_mail_in_background(
                 subject='Reset your Bharini password',
                 message=(
                     f"Hi {user.first_name or user.email},\n\n"
                     f"Use the following link to reset your password: {reset_link}\n\n"
                     'If you did not request this reset, ignore this message.'
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
+                recipient=user.email,
             )
 
         return ok_response(request, message='If the account exists, a password reset link has been sent.')

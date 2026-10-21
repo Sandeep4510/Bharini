@@ -63,7 +63,7 @@ export default function RegisterPage() {
   return (
     <AuthShell
       title="Create account"
-      subtitle="Join Bharini as an artist or a production house."
+      subtitle="Join Bharini as an artist, technician or production house."
     >
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         {error ? (
@@ -86,7 +86,7 @@ export default function RegisterPage() {
             onChange={(event) => setRole(event.target.value)}
             className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-3 text-base text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
           >
-            <option value="artist">Artist</option>
+            <option value="artist">Artist / Technician</option>
             <option value="production_house">Production house</option>
           </select>
         </label>

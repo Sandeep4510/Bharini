@@ -45,6 +45,7 @@ coverage/
 # Local databases and generated files
 *.sqlite3
 *.db
+backend/media/
 
 # Local environment files
 .env
