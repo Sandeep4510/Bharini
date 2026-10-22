@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark; /* native dropdowns, datalists, date and file pickers render dark */
   --background: #020817;
   --foreground: #f8fafc;
 }
@@ -35,4 +36,14 @@ button,
 input,
 select {
   font: inherit;
+}
+
+select option,
+select optgroup {
+  background-color: #0f172a; /* slate-900, the card colour */
+  color: var(--foreground);
+}
+
+select option:checked {
+  background-color: #6d28d9; /* violet-700, the app accent */
 }

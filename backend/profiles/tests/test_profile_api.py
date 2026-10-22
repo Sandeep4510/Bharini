@@ -155,6 +155,16 @@ class ProfileApiTests(TestCase):
         self.assertEqual([item['title'] for item in response.data['data']['documents']], ['Award'])
         self.assertFalse(document.file.storage.exists(document.file.name))
 
+    def test_instruments_required_for_musicians_and_accept_others(self, check_face_mock):
+        data = self.client.patch('/api/v1/profile/', {'disciplines': ['musician']}, format='json').data['data']
+        self.assertIn('instruments', data['missing_fields'])
+        response = self.client.patch('/api/v1/profile/', {'instruments': ['Tabla', ' Morsing ', 'tabla']}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['instruments'], ['Tabla', 'Morsing'])
+        self.assertNotIn('instruments', response.data['data']['missing_fields'])
+        response = self.client.patch('/api/v1/profile/', {'instruments': [f'Drum {i}' for i in range(21)]}, format='json')
+        self.assertEqual(response.status_code, 400)
+
     def test_height_required_only_for_actors(self, check_face_mock):
         data = self.client.patch('/api/v1/profile/', {'disciplines': ['singer']}, format='json').data['data']
         self.assertNotIn('height_cm', data['missing_fields'])

@@ -181,8 +181,8 @@ export class ApiClient {
     });
   }
 
-  /** Full-page URL that starts Google/Facebook sign-in on the backend (django-allauth). */
-  socialLoginUrl(provider: 'google' | 'facebook', role?: string) {
+  /** Full-page URL that starts Google sign-in on the backend (django-allauth). */
+  socialLoginUrl(provider: 'google', role?: string) {
     return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${role ? `?role=${encodeURIComponent(role)}` : ''}`;
   }
 
@@ -260,6 +260,18 @@ export class ApiClient {
     form.append('body', body);
     if (media) form.append('media', media);
     return this.request<AuthApiResponse<Post>>('/api/v1/posts/', { method: 'POST', body: form });
+  }
+
+  updatePost(id: number, changes: { body: string; media?: File | null; removeMedia?: boolean }) {
+    const form = new FormData();
+    form.append('body', changes.body);
+    if (changes.media) form.append('media', changes.media);
+    if (changes.removeMedia) form.append('remove_media', 'true');
+    return this.request<AuthApiResponse<Post>>(`/api/v1/posts/${id}/`, { method: 'PATCH', body: form });
+  }
+
+  deletePost(id: number) {
+    return this.request<AuthApiResponse<null>>(`/api/v1/posts/${id}/`, { method: 'DELETE' });
   }
 
   sendAltEmailPin() {

@@ -38,6 +38,15 @@ LANGUAGES = [
 ]
 
 
+# common picks for musicians; anything else is typed in as an "other" instrument
+INSTRUMENTS = [
+    'Guitar', 'Keyboard / Piano', 'Drums', 'Bass guitar', 'Violin', 'Flute', 'Tabla', 'Mridangam',
+    'Veena', 'Sitar', 'Harmonium', 'Saxophone', 'Trumpet', 'Ukulele', 'Cajon', 'Santoor', 'Sarangi', 'Shehnai',
+    'Nadaswaram', 'Ghatam', 'Dhol', 'Chenda',
+]
+INSTRUMENT_LIMIT = 20
+
+
 class Discipline(models.TextChoices):
     ACTOR = 'actor', 'Actor'
     SINGER = 'singer', 'Singer'
@@ -87,6 +96,7 @@ class ArtistProfile(models.Model):
     height_cm = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MinValueValidator(50), MaxValueValidator(250)],
     )
+    instruments = ArrayField(models.CharField(max_length=50), default=list, blank=True)
     location = models.CharField(max_length=100, blank=True, help_text='City and state, e.g. Mangaluru, Karnataka')
     phone = models.CharField(
         max_length=16,
@@ -118,6 +128,8 @@ class ArtistProfile(models.Model):
             missing.append('disciplines')
         if self.needs_height and not self.height_cm:
             missing.append('height_cm')
+        if self.needs_instruments and not self.instruments:
+            missing.append('instruments')
         if not self.languages.exists():
             missing.append('languages')
         return missing
@@ -127,9 +139,13 @@ class ArtistProfile(models.Model):
         return Discipline.ACTOR in self.disciplines
 
     @property
+    def needs_instruments(self):
+        return Discipline.MUSICIAN in self.disciplines
+
+    @property
     def needs_casting_photos(self):
-        # singers, musicians and directors are cast on their work, not their look
-        return bool({Discipline.ACTOR, Discipline.CHOREOGRAPHER} & set(self.disciplines))
+        # only actors are cast on their look; other disciplines on their work
+        return Discipline.ACTOR in self.disciplines
 
     @property
     def onboarding_complete(self):
@@ -137,7 +153,7 @@ class ArtistProfile(models.Model):
 
     @property
     def completion_percent(self):
-        required_total = len(self.REQUIRED_FIELDS) + 2 + self.needs_height
+        required_total = len(self.REQUIRED_FIELDS) + 2 + self.needs_height + self.needs_instruments
         total = required_total
         done = required_total - len(self.missing_fields)
         if self.needs_casting_photos:

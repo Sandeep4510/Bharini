@@ -16,7 +16,7 @@ from accounts.mail import send_mail_in_background
 from accounts.responses import error_response, ok_response
 
 from .media import process_photo, validate_document, validate_media
-from .models import LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, PortfolioMedia, ProfileDocument, ProfileLanguage
+from .models import INSTRUMENTS, LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, PortfolioMedia, ProfileDocument, ProfileLanguage
 from .serializers import (
     ArtistProfileSerializer,
     LanguageListSerializer,
@@ -82,6 +82,7 @@ class ProfileOptionsAPIView(APIView):
             'languages': options(LANGUAGES),
             'language_levels': options(ProfileLanguage.Level.choices),
             'document_kinds': options(ProfileDocument.Kind.choices),
+            'instruments': [{'value': name, 'label': name} for name in INSTRUMENTS],
         })
 
 

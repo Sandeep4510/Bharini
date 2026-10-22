@@ -12,7 +12,7 @@ import { errorMessage, fieldErrorsFrom, inputClass, okBorder, secondaryButton } 
 
 const SHOWREEL_LIMIT = 5;
 // mirrors ArtistProfile.needs_casting_photos on the backend
-const CASTING_PHOTO_DISCIPLINES: Discipline[] = ['actor', 'choreographer'];
+const CASTING_PHOTO_DISCIPLINES: Discipline[] = ['actor'];
 
 function ShowreelLinks({ profile, onProfile }: { profile: ArtistProfile; onProfile: (profile: ArtistProfile) => void }) {
   const [links, setLinks] = useState<string[]>(profile.showreel_links.length ? profile.showreel_links : ['']);

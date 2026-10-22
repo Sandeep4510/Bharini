@@ -47,6 +47,7 @@ export type ArtistProfile = {
   gender: Gender | '';
   date_of_birth: string | null;
   height_cm: number | null;
+  instruments: string[];
   location: string;
   phone: string;
   alt_email: string;
@@ -71,6 +72,7 @@ export type ProfileOptions = {
   languages: Option[];
   language_levels: Option[];
   document_kinds: Option[];
+  instruments: Option[];
 };
 
 export type UsernameCheck = { username: string; available: boolean; suggestions: string[] };

@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .media import process_photo
-from .models import PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, ProfileDocument, ProfileLanguage
+from .models import INSTRUMENT_LIMIT, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, ProfileDocument, ProfileLanguage
 from .slots import SHOWREEL_LINK_LIMIT, SLOTS
 
 SHOWREEL_HOSTS = ('youtube.com', 'youtu.be', 'vimeo.com', 'drive.google.com')
@@ -96,6 +96,7 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             'gender',
             'date_of_birth',
             'height_cm',
+            'instruments',
             'location',
             'phone',
             'alt_email',
@@ -146,6 +147,17 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
         if username_taken(value, self.instance):
             raise serializers.ValidationError('This username is taken. Try one of the suggestions.')
         return value
+
+    def validate_instruments(self, value):
+        # known picks and free-text "others" share one list; trim, drop blanks and case-insensitive repeats
+        cleaned = {}
+        for name in value:
+            name = ' '.join(name.split())
+            if name:
+                cleaned.setdefault(name.lower(), name)
+        if len(cleaned) > INSTRUMENT_LIMIT:
+            raise serializers.ValidationError(f'Add up to {INSTRUMENT_LIMIT} instruments.')
+        return list(cleaned.values())
 
     def validate_disciplines(self, value):
         if not value:

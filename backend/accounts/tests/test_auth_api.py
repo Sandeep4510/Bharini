@@ -228,12 +228,13 @@ class AuthApiTests(TestCase):
 
     def test_social_start_remembers_role_and_rejects_unknown_provider(self):
         browser = Client()
-        providers = {'google': {'APPS': [{'client_id': 'id', 'secret': 's'}]}, 'facebook': {'APPS': []}}
+        providers = {'google': {'APPS': [{'client_id': 'id', 'secret': 's'}]}}
         with self.settings(SOCIALACCOUNT_PROVIDERS=providers):
             response = browser.get('/api/v1/auth/social/google/start/?role=production_house')
             self.assertEqual(response['Location'], '/accounts/google/login/')
             self.assertEqual(browser.session['social_signup_role'], 'production_house')
             response = browser.get('/api/v1/auth/social/twitter/start/')
             self.assertIn('social_error=unknown_provider', response['Location'])
-            response = browser.get('/api/v1/auth/social/facebook/start/')
+        with self.settings(SOCIALACCOUNT_PROVIDERS={'google': {'APPS': []}}):
+            response = browser.get('/api/v1/auth/social/google/start/')
             self.assertIn('social_error=not_configured', response['Location'])
