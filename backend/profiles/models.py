@@ -53,6 +53,7 @@ class Discipline(models.TextChoices):
     CHOREOGRAPHER = 'choreographer', 'Choreographer'
     MUSICIAN = 'musician', 'Musician'
     DIRECTOR = 'director', 'Director'
+    CINEMATOGRAPHER = 'cinematographer', 'Cinematographer / Cameraman'
 
 
 def photo_upload_to(instance, filename):
@@ -191,6 +192,7 @@ class PortfolioMedia(models.Model):
     class Kind(models.TextChoices):
         VIDEO = 'video', 'Video'
         AUDIO = 'audio', 'Audio'
+        IMAGE = 'image', 'Image'
 
     profile = models.ForeignKey(ArtistProfile, on_delete=models.CASCADE, related_name='media')
     discipline = models.CharField(max_length=20, choices=Discipline.choices)

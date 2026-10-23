@@ -13,7 +13,7 @@ export type AuthUser = {
   completion_percent?: number | null;
 };
 
-export type Discipline = 'actor' | 'singer' | 'choreographer' | 'musician' | 'director';
+export type Discipline = 'actor' | 'singer' | 'choreographer' | 'musician' | 'director' | 'cinematographer';
 export type Gender = 'male' | 'female' | 'non_binary';
 export type LanguageLevel = 'native' | 'fluent' | 'conversational' | 'basic';
 export type PhotoSlot = 'center' | 'left' | 'right' | 'full_length';
@@ -23,7 +23,7 @@ export type ProfileLanguage = { language: string; level: LanguageLevel };
 export type MediaSlot = {
   key: string;
   label: string;
-  kind: 'video' | 'audio';
+  kind: 'video' | 'audio' | 'image';
   max_seconds: number;
   max_mb: number;
   file: { url: string; duration_seconds: number } | null;
@@ -77,13 +77,44 @@ export type ProfileOptions = {
 
 export type UsernameCheck = { username: string; available: boolean; suggestions: string[] };
 
+export type UserSummary = {
+  id: number;
+  name: string;
+  role: UserRole;
+  username: string | null;
+  profile_photo: string | null;
+};
+
 export type Post = {
   id: number;
-  author_name: string;
+  author: UserSummary;
   body: string;
   media: string | null;
   media_kind: 'image' | 'video' | '';
   created_at: string;
+  like_count: number;
+  comment_count: number;
+  liked: boolean;
+  is_mine: boolean;
+};
+
+export type PostComment = {
+  id: number;
+  author: UserSummary;
+  body: string;
+  created_at: string;
+  can_delete: boolean;
+};
+
+export type PublicProfile = UserSummary & {
+  bio: string;
+  location: string;
+  disciplines: string[];
+  follower_count: number;
+  following_count: number;
+  is_following: boolean;
+  is_me: boolean;
+  posts: Post[];
 };
 
 export type TokenPair = {

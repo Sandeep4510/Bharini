@@ -5,6 +5,8 @@ import type {
   AuthUser,
   PhotoSlot,
   Post,
+  PostComment,
+  PublicProfile,
   ProfileLanguage,
   ProfileOptions,
   TokenPair,
@@ -272,6 +274,41 @@ export class ApiClient {
 
   deletePost(id: number) {
     return this.request<AuthApiResponse<null>>(`/api/v1/posts/${id}/`, { method: 'DELETE' });
+  }
+
+  getPost(id: number) {
+    return this.request<AuthApiResponse<Post>>(`/api/v1/posts/${id}/`);
+  }
+
+  setLike(id: number, liked: boolean) {
+    return this.request<AuthApiResponse<{ liked: boolean; like_count: number }>>(`/api/v1/posts/${id}/like/`, {
+      method: liked ? 'POST' : 'DELETE',
+    });
+  }
+
+  getComments(postId: number) {
+    return this.request<AuthApiResponse<{ comments: PostComment[] }>>(`/api/v1/posts/${postId}/comments/`);
+  }
+
+  addComment(postId: number, body: string) {
+    return this.request<AuthApiResponse<PostComment>>(`/api/v1/posts/${postId}/comments/`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteComment(postId: number, commentId: number) {
+    return this.request<AuthApiResponse<null>>(`/api/v1/posts/${postId}/comments/${commentId}/`, { method: 'DELETE' });
+  }
+
+  getUserProfile(id: number) {
+    return this.request<AuthApiResponse<PublicProfile>>(`/api/v1/users/${id}/`);
+  }
+
+  setFollow(id: number, following: boolean) {
+    return this.request<AuthApiResponse<{ is_following: boolean; follower_count: number }>>(`/api/v1/users/${id}/follow/`, {
+      method: following ? 'POST' : 'DELETE',
+    });
   }
 
   sendAltEmailPin() {

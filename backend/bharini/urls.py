@@ -19,11 +19,14 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from posts.urls import user_urlpatterns
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('accounts.urls')),
     path('api/v1/profile/', include('profiles.urls')),
     path('api/v1/posts/', include('posts.urls')),
+    path('api/v1/users/', include(user_urlpatterns)),
     path('accounts/', include('allauth.urls')),
 ]
 

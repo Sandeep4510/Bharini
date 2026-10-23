@@ -197,7 +197,10 @@ class MediaSlotAPIView(ArtistAPIView):
         if not upload:
             return self.missing_file_error()
         try:
-            duration = validate_media(upload, slot)
+            if slot['kind'] == 'image':
+                upload, duration = process_photo(upload, None), 0
+            else:
+                duration = validate_media(upload, slot)
         except DjangoValidationError as exc:
             return self.upload_error(exc)
 
