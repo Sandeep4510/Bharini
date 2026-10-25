@@ -19,13 +19,16 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from artist_posts.urls import user_urlpatterns
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('accounts.urls')),
     path('api/v1/profile/', include('profiles.urls')),
-    path('api/v1/posts/', include('posts.urls')),
+    path('api/v1/posts/', include('artist_posts.urls')),
     path('api/v1/productions/', include('productions.urls')),
-    path('api/v1/feed/', include('social.urls')),
+    path('api/v1/feed/', include('production_posts.urls')),
+    path('api/v1/users/', include(user_urlpatterns)),
     path('accounts/', include('allauth.urls')),
 ]
 

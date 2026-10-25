@@ -238,6 +238,27 @@ class ProfileApiTests(TestCase):
         response = self.client.put('/api/v1/profile/media/choreographer/video_1/', {'file': make_video(118, fps=2)}, format='multipart')
         self.assertEqual(response.status_code, 200, response.data)
 
+    def test_cinematographer_images_and_thirty_second_videos(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'disciplines': ['cinematographer']}, format='json')
+        response = self.client.put('/api/v1/profile/media/cinematographer/image_1/', {'file': make_image()}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        item = PortfolioMedia.objects.get(profile__user=self.user, slot='image_1')
+        self.assertEqual(item.kind, 'image')
+        self.assertTrue(item.file.name.endswith('.jpg'))
+        check_face_mock.assert_not_called()
+
+        bad = SimpleUploadedFile('frame.jpg', b'not an image', content_type='image/jpeg')
+        response = self.client.put('/api/v1/profile/media/cinematographer/image_2/', {'file': bad}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.put('/api/v1/profile/media/cinematographer/video_1/', {'file': make_video(31, fps=2)}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        response = self.client.put('/api/v1/profile/media/cinematographer/video_1/', {'file': make_video(29, fps=2)}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        slots = response.data['data']['media_slots'][0]['slots']
+        self.assertEqual([slot['kind'] for slot in slots].count('image'), 5)
+        self.assertEqual([slot['kind'] for slot in slots].count('video'), 5)
+
     def test_alt_email_pin_flow(self, check_face_mock):
         self.client.patch('/api/v1/profile/', {'alt_email': 'asha.alt@example.com'}, format='json')
         response = self.client.post('/api/v1/profile/alt-email/send-pin/')

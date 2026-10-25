@@ -7,11 +7,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { ApiError, apiClient } from '@bharini/api-client';
 import { readSession } from '@bharini/auth';
-import type { ArtistDirectoryProfile, HomePost, Production } from '@bharini/types';
+import type { ArtistDirectoryProfile, ArtistPost, Production } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
 import { ArtistCard } from '@/components/artist-card';
 import { useAuth } from '@/components/auth-provider';
+import { ArtistHome } from '@/components/artist-home';
 import {
   ErrorBanner,
   errorMessage,
@@ -25,7 +26,7 @@ import {
 const BODY_LIMIT = 5000;
 const VIDEO_MAX_MB = 100;
 
-function Composer({ onPosted }: { onPosted: (post: HomePost) => void }) {
+function Composer({ onPosted }: { onPosted: (post: ArtistPost) => void }) {
   const [body, setBody] = useState('');
   const [media, setMedia] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
@@ -82,11 +83,11 @@ function Composer({ onPosted }: { onPosted: (post: HomePost) => void }) {
   );
 }
 
-function PostCard({ post }: { post: HomePost }) {
+function PostCard({ post }: { post: ArtistPost }) {
   return (
     <article className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
       <p className="text-xs text-slate-400">
-        {post.author_name} · {new Date(post.created_at).toLocaleString()}
+        {post.author.name} · {new Date(post.created_at).toLocaleString()}
       </p>
       <p className="mt-2 whitespace-pre-line text-slate-100">{post.body}</p>
       {post.media && post.media_kind === 'image' ? (
@@ -99,11 +100,11 @@ function PostCard({ post }: { post: HomePost }) {
   );
 }
 
-export default function HomePage() {
+function ProductionHome() {
   const router = useRouter();
   const { user } = useAuth();
   const isProductionHouse = user?.role === 'production_house';
-  const [posts, setPosts] = useState<HomePost[]>([]);
+  const [posts, setPosts] = useState<ArtistPost[]>([]);
   const [production, setProduction] = useState<Production | null>(null);
   const [artists, setArtists] = useState<ArtistDirectoryProfile[]>([]);
   useEffect(() => {
@@ -228,4 +229,9 @@ function formatTitleCredits(production: Production, kind: 'movie' | 'serial') {
   const items = production.title_credits.filter((credit) => credit.kind === kind);
   if (!items.length) return '—';
   return items.map((item) => `${item.name}${item.release_year ? ` (${item.release_year})` : ''}`).join(', ');
+}
+
+export default function HomePage() {
+  const { user } = useAuth();
+  return user?.role === 'artist' ? <ArtistHome /> : <ProductionHome />;
 }

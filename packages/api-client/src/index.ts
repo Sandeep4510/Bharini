@@ -7,10 +7,12 @@ import type {
   AuthUser,
   CastingCallDetails,
   CursorPage,
-  HomePost,
+  ArtistPost,
+  ArtistPostComment,
   PhotoSlot,
   Post,
   PostComment,
+  PublicProfile,
   ProfileLanguage,
   ProfileOptions,
   Production,
@@ -328,7 +330,7 @@ export class ApiClient {
     return this.request<AuthApiResponse<CursorPage<Post>>>(`/api/v1/productions/${productionId}/posts/${query}`);
   }
 
-  createPost(body: string, media?: File | null): Promise<AuthApiResponse<HomePost>>;
+  createPost(body: string, media?: File | null): Promise<AuthApiResponse<ArtistPost>>;
   createPost(
     payload: {
       post_type: 'casting_call';
@@ -346,12 +348,12 @@ export class ApiClient {
           casting: CastingCallDetails;
         },
     media?: File | null,
-  ): Promise<AuthApiResponse<HomePost> | AuthApiResponse<Post>> {
+  ): Promise<AuthApiResponse<ArtistPost> | AuthApiResponse<Post>> {
     if (typeof bodyOrPayload === 'string') {
       const form = new FormData();
       form.append('body', bodyOrPayload);
       if (media) form.append('media', media);
-      return this.request<AuthApiResponse<HomePost>>('/api/v1/posts/', {
+      return this.request<AuthApiResponse<ArtistPost>>('/api/v1/posts/', {
         method: 'POST',
         body: form,
       });
@@ -401,7 +403,57 @@ export class ApiClient {
   }
 
   getPosts() {
-    return this.request<AuthApiResponse<{ posts: HomePost[] }>>('/api/v1/posts/');
+    return this.request<AuthApiResponse<{ posts: ArtistPost[] }>>('/api/v1/posts/');
+  }
+
+  updatePost(id: number, changes: { body: string; media?: File | null; removeMedia?: boolean }) {
+    const form = new FormData();
+    form.append('body', changes.body);
+    if (changes.media) form.append('media', changes.media);
+    if (changes.removeMedia) form.append('remove_media', 'true');
+    return this.request<AuthApiResponse<ArtistPost>>(`/api/v1/posts/${id}/`, { method: 'PATCH', body: form });
+  }
+
+  deletePost(id: number) {
+    return this.request<AuthApiResponse<null>>(`/api/v1/posts/${id}/`, { method: 'DELETE' });
+  }
+
+  getPost(id: number) {
+    return this.request<AuthApiResponse<ArtistPost>>(`/api/v1/posts/${id}/`);
+  }
+
+  setLike(id: number, liked: boolean) {
+    return this.request<AuthApiResponse<{ liked: boolean; like_count: number }>>(`/api/v1/posts/${id}/like/`, {
+      method: liked ? 'POST' : 'DELETE',
+    });
+  }
+
+  getComments(postId: number) {
+    return this.request<AuthApiResponse<{ comments: ArtistPostComment[] }>>(`/api/v1/posts/${postId}/comments/`);
+  }
+
+  addArtistComment(postId: number, body: string) {
+    return this.request<AuthApiResponse<ArtistPostComment>>(`/api/v1/posts/${postId}/comments/`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteComment(postId: number, commentId: number) {
+    return this.request<AuthApiResponse<null>>(`/api/v1/posts/${postId}/comments/${commentId}/`, { method: 'DELETE' });
+  }
+
+  getUserProfile(id: number) {
+    return this.request<AuthApiResponse<PublicProfile>>(`/api/v1/users/${id}/`);
+  }
+
+  setFollow(id: number, following: boolean) {
+    return this.request<AuthApiResponse<{ is_following: boolean; follower_count: number }>>(
+      `/api/v1/users/${id}/follow/`,
+      {
+        method: following ? 'POST' : 'DELETE',
+      },
+    );
   }
 
   sendAltEmailPin() {

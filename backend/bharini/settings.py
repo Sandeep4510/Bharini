@@ -125,9 +125,9 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.facebook',
     'accounts',
     'profiles',
-    'posts',
+    'artist_posts',
     'productions',
-    'social',
+    'production_posts',
 ]
 
 MIDDLEWARE = [

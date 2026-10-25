@@ -1,6 +1,6 @@
 from django.urls import path
 
-from social.views import ProductionPostsAPIView
+from production_posts.views import ProductionPostsAPIView
 
 from .views import MyProductionAPIView, ProductionCreateAPIView, ProductionDetailAPIView
 

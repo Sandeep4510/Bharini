@@ -24,6 +24,8 @@ SLOTS = {
     'musician': _PERFORMANCE,
     'choreographer': _numbered('video', 'Video', 5, 'video', 120, 200),
     'director': _numbered('reel', 'Reel', 3, 'video', 120, 200),
+    # images have no length; max_seconds stays 0
+    'cinematographer': _numbered('image', 'Image', 5, 'image', 0, 8) + _numbered('video', 'Video', 5, 'video', 30, 60),
 }
 
 

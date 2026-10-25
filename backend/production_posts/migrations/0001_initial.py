@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
                 ('languages', models.CharField(max_length=200)),
                 ('location', models.CharField(max_length=200)),
                 ('approx_pay', models.CharField(max_length=200)),
-                ('post', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='casting', to='social.post')),
+                ('post', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='casting', to='production_posts.post')),
             ],
         ),
         migrations.CreateModel(
@@ -50,8 +50,8 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('body', models.CharField(max_length=500)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='post_comments', to=settings.AUTH_USER_MODEL)),
-                ('post', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='social.post')),
+                ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='production_post_comments', to=settings.AUTH_USER_MODEL)),
+                ('post', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='production_posts.post')),
             ],
             options={
                 'ordering': ['created_at'],
@@ -62,11 +62,11 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('post', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='likes', to='social.post')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='post_likes', to=settings.AUTH_USER_MODEL)),
+                ('post', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='likes', to='production_posts.post')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='production_post_likes', to=settings.AUTH_USER_MODEL)),
             ],
             options={
-                'constraints': [models.UniqueConstraint(fields=('post', 'user'), name='unique_post_like')],
+                'constraints': [models.UniqueConstraint(fields=('post', 'user'), name='unique_production_post_like')],
             },
         ),
     ]

@@ -74,13 +74,13 @@ def main() -> int:
         pass
 
     try:
-        from posts.models import Post
+        from artist_posts.models import Post
         Post.objects.filter(author=user).delete()
     except Exception:
         pass
 
     try:
-        from social.models import PostComment, PostLike
+        from production_posts.models import PostComment, PostLike
         PostComment.objects.filter(author=user).delete()
         PostLike.objects.filter(user=user).delete()
     except Exception:
