@@ -47,7 +47,6 @@ export type ArtistProfile = {
   gender: Gender | '';
   date_of_birth: string | null;
   height_cm: number | null;
-  instruments: string[];
   location: string;
   phone: string;
   alt_email: string;
@@ -64,6 +63,23 @@ export type ArtistProfile = {
   completion_percent: number;
 };
 
+export type ArtistDirectoryProfile = {
+  id: number;
+  username: string | null;
+  display_name: string;
+  profile_photo: string | null;
+  disciplines: string[];
+  location: string;
+};
+
+export type ArtistDirectoryFilters = {
+  age_min?: number;
+  age_max?: number;
+  gender?: string;
+  discipline?: string;
+  language?: string;
+};
+
 export type Option = { value: string; label: string };
 
 export type ProfileOptions = {
@@ -72,12 +88,11 @@ export type ProfileOptions = {
   languages: Option[];
   language_levels: Option[];
   document_kinds: Option[];
-  instruments: Option[];
 };
 
 export type UsernameCheck = { username: string; available: boolean; suggestions: string[] };
 
-export type Post = {
+export type HomePost = {
   id: number;
   author_name: string;
   body: string;
@@ -97,4 +112,66 @@ export type ApiEnvelope<T> = {
   request_id?: string;
   data?: T;
   field_errors?: Record<string, unknown>;
+};
+
+export type ProductionKind = 'individual' | 'house';
+
+export type ProductionSummary = {
+  id: number;
+  name: string;
+  kind: ProductionKind;
+  profile_picture: string | null;
+};
+
+export type TitleCredit = {
+  id: number;
+  name: string;
+  kind: 'movie' | 'serial';
+  release_year: number | null;
+  poster: string | null;
+  role: 'made' | 'part_of';
+};
+
+export type Production = ProductionSummary & {
+  title_credits: TitleCredit[];
+  is_owner: boolean;
+  created_at: string;
+};
+
+export type CastingCallDetails = {
+  age_min: number;
+  age_max: number;
+  gender: 'any' | 'male' | 'female' | 'other';
+  complexion: 'any' | 'fair' | 'wheatish' | 'medium' | 'dusky' | 'dark';
+  languages: string;
+  location: string;
+  approx_pay: string;
+};
+
+export type Post = {
+  id: number;
+  post_type: 'update' | 'casting_call';
+  body: string;
+  image: string | null;
+  hashtags: string[];
+  share_count: number;
+  like_count: number;
+  comment_count: number;
+  is_liked: boolean;
+  casting: CastingCallDetails | null;
+  production: ProductionSummary;
+  created_at: string;
+};
+
+export type PostComment = {
+  id: number;
+  body: string;
+  author_name: string;
+  created_at: string;
+};
+
+export type CursorPage<T> = {
+  next: string | null;
+  previous: string | null;
+  results: T[];
 };

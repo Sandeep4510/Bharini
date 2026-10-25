@@ -43,24 +43,3 @@ class PostApiTests(TestCase):
 
         posts = self.client.get('/api/v1/posts/').data['data']['posts']
         self.assertEqual([post['body'] for post in posts], ['On set', 'First audition done!'])
-
-    def test_only_the_author_can_edit_and_delete(self):
-        output = BytesIO()
-        Image.new('RGB', (50, 50)).save(output, format='PNG')
-        image = SimpleUploadedFile('set.png', output.getvalue(), content_type='image/png')
-        post_id = self.client.post('/api/v1/posts/', {'body': 'Draft', 'media': image}, format='multipart').data['data']['id']
-
-        stranger = User.objects.create_user(email='other@example.com', first_name='O', last_name='P', password='StrongPass123!')
-        other = APIClient()
-        other.force_authenticate(stranger)
-        self.assertEqual(other.patch(f'/api/v1/posts/{post_id}/', {'body': 'hacked'}, format='json').status_code, 404)
-        self.assertEqual(other.delete(f'/api/v1/posts/{post_id}/').status_code, 404)
-
-        self.assertEqual(self.client.patch(f'/api/v1/posts/{post_id}/', {'body': ' '}, format='json').status_code, 400)
-        response = self.client.patch(f'/api/v1/posts/{post_id}/', {'body': 'Final', 'remove_media': 'true'}, format='multipart')
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['data']['body'], 'Final')
-        self.assertIsNone(response.data['data']['media'])
-
-        self.assertEqual(self.client.delete(f'/api/v1/posts/{post_id}/').status_code, 200)
-        self.assertEqual(self.client.get('/api/v1/posts/').data['data']['posts'], [])

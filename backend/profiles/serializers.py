@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .media import process_photo
-from .models import INSTRUMENT_LIMIT, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, ProfileDocument, ProfileLanguage
+from .models import LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, ProfileDocument, ProfileLanguage
 from .slots import SHOWREEL_LINK_LIMIT, SLOTS
 
 SHOWREEL_HOSTS = ('youtube.com', 'youtu.be', 'vimeo.com', 'drive.google.com')
@@ -96,7 +96,6 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             'gender',
             'date_of_birth',
             'height_cm',
-            'instruments',
             'location',
             'phone',
             'alt_email',
@@ -147,17 +146,6 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
         if username_taken(value, self.instance):
             raise serializers.ValidationError('This username is taken. Try one of the suggestions.')
         return value
-
-    def validate_instruments(self, value):
-        # known picks and free-text "others" share one list; trim, drop blanks and case-insensitive repeats
-        cleaned = {}
-        for name in value:
-            name = ' '.join(name.split())
-            if name:
-                cleaned.setdefault(name.lower(), name)
-        if len(cleaned) > INSTRUMENT_LIMIT:
-            raise serializers.ValidationError(f'Add up to {INSTRUMENT_LIMIT} instruments.')
-        return list(cleaned.values())
 
     def validate_disciplines(self, value):
         if not value:
@@ -219,3 +207,32 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
 
 class PinSerializer(serializers.Serializer):
     pin = serializers.RegexField(r'^\d{6}$', error_messages={'invalid': 'Enter the 6-digit PIN.'})
+
+
+class ArtistDirectorySerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+    disciplines = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ArtistProfile
+        fields = ('id', 'username', 'display_name', 'profile_photo', 'disciplines', 'location')
+
+    def get_display_name(self, obj):
+        full_name = obj.user.get_full_name().strip()
+        return full_name or obj.user.email
+
+    def get_disciplines(self, obj):
+        return [Discipline(item).label if item in Discipline.values else item for item in obj.disciplines]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['profile_photo'] = absolute_url(self.context.get('request'), instance.profile_photo)
+        return data
+
+
+class ArtistDirectoryFilterSerializer(serializers.Serializer):
+    age_min = serializers.IntegerField(required=False, min_value=0, max_value=120)
+    age_max = serializers.IntegerField(required=False, min_value=0, max_value=120)
+    gender = serializers.ChoiceField(choices=ArtistProfile.Gender.choices, required=False)
+    discipline = serializers.ChoiceField(choices=Discipline.choices, required=False)
+    language = serializers.ChoiceField(choices=LANGUAGES, required=False)

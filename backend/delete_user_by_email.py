@@ -20,15 +20,77 @@ def main() -> int:
     django.setup()
 
     from django.contrib.auth import get_user_model
+    from django.apps import apps
 
     User = get_user_model()
-    deleted_count, _ = User.objects.filter(email__iexact=email).delete()
-
-    if deleted_count:
-        print(f'Deleted {deleted_count} user(s) with email: {email}')
-    else:
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
         print(f'No user found with email: {email}')
+        return 0
 
+    # Clean up direct child records first so FK constraints do not block the delete.
+    app_models = apps.app_configs
+
+    try:
+        from accounts.models import RefreshSession
+        RefreshSession.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from token_blacklist.models import OutstandingToken
+        OutstandingToken.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from allauth.account.models import EmailAddress
+        EmailAddress.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from allauth.socialaccount.models import SocialAccount
+        SocialAccount.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from django.contrib.admin.models import LogEntry
+        LogEntry.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from profiles.models import ArtistProfile, ProfileLanguage, PortfolioMedia, ProfileDocument
+        ArtistProfile.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from productions.models import ProductionProfile
+        ProductionProfile.objects.filter(owner=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from posts.models import Post
+        Post.objects.filter(author=user).delete()
+    except Exception:
+        pass
+
+    try:
+        from social.models import PostComment, PostLike
+        PostComment.objects.filter(author=user).delete()
+        PostLike.objects.filter(user=user).delete()
+    except Exception:
+        pass
+
+    deleted_count, _ = User.objects.filter(pk=user.pk).delete()
+    if deleted_count:
+        print(f'Deleted user with email: {email}')
+    else:
+        print(f'Failed to delete user with email: {email}')
     return 0
 
 

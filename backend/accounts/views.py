@@ -189,7 +189,7 @@ def login_response(request, user):
     return set_refresh_cookie(response, str(refresh_token))
 
 
-SOCIAL_PROVIDERS = ('google',)
+SOCIAL_PROVIDERS = ('google', 'facebook')
 SOCIAL_CODE_LIFETIME_SECONDS = 60
 
 

@@ -1,4 +1,4 @@
-"""Glue between django-allauth's Google login and our JWT auth."""
+"""Glue between django-allauth's Google/Facebook login and our JWT auth."""
 from django.conf import settings
 from django.shortcuts import redirect
 from django.utils import timezone

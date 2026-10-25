@@ -147,9 +147,14 @@ export function SocialButtons({ role }: { role?: string }) {
         or
         <span className="h-px flex-1 bg-slate-800" />
       </div>
-      <a href={apiClient.socialLoginUrl("google", role)} className={socialButton}>
-        <span className="font-bold text-sky-300">G</span> Continue with Google
-      </a>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <a href={apiClient.socialLoginUrl("google", role)} className={socialButton}>
+          <span className="font-bold text-sky-300">G</span> Continue with Google
+        </a>
+        <a href={apiClient.socialLoginUrl("facebook", role)} className={socialButton}>
+          <span className="font-bold text-blue-400">f</span> Continue with Facebook
+        </a>
+      </div>
     </div>
   );
 }

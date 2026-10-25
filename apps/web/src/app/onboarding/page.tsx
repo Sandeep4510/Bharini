@@ -13,7 +13,6 @@ import { CompletionBar } from '@/components/completion-bar';
 import { DisciplinePicker } from '@/components/discipline-picker';
 import { DateOfBirthInput } from '@/components/dob-input';
 import { HeightInput } from '@/components/height-input';
-import { InstrumentPicker } from '@/components/instrument-picker';
 import { AppHeader } from '@/components/app-header';
 import { PortfolioEditor } from '@/components/portfolio-editor';
 import {
@@ -36,7 +35,7 @@ import { INDIAN_CITIES } from '@/lib/indian-cities';
 
 const STEPS = ['About you', 'Languages', 'Contact', 'Portfolio'];
 const STEP_FIELDS = [
-  ['username', 'disciplines', 'profile_photo', 'bio', 'gender', 'date_of_birth', 'height_cm', 'instruments'],
+  ['username', 'disciplines', 'profile_photo', 'bio', 'gender', 'date_of_birth', 'height_cm'],
   ['languages'],
   ['location', 'phone'],
 ];
@@ -80,8 +79,6 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
   const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth ?? '');
   const [heightCm, setHeightCm] = useState(profile.height_cm);
   const isActor = disciplines.includes('actor');
-  const [instruments, setInstruments] = useState<string[]>(profile.instruments);
-  const isMusician = disciplines.includes('musician');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -104,7 +101,6 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
     if (!gender) clientErrors.gender = 'Choose one.';
     if (!dateOfBirth) clientErrors.date_of_birth = 'Enter your date of birth.';
     if (isActor && !heightCm) clientErrors.height_cm = 'Enter your height.';
-    if (isMusician && !instruments.length) clientErrors.instruments = 'Pick or add at least one instrument.';
     return clientErrors;
   };
   const check = (field: string) => setErrors((previous) => ({ ...previous, [field]: validate()[field] ?? '' }));
@@ -124,7 +120,6 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
     body.append('gender', gender);
     body.append('date_of_birth', dateOfBirth);
     if (isActor && heightCm) body.append('height_cm', String(heightCm));
-    if (isMusician) instruments.forEach((instrument) => body.append('instruments', instrument));
 
     setBusy(true);
     try {
@@ -180,11 +175,6 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
       {isActor ? (
         <div onBlur={onLeave(() => check('height_cm'))}>
           <HeightInput value={heightCm} onChange={setHeightCm} error={errors.height_cm} />
-        </div>
-      ) : null}
-      {isMusician ? (
-        <div onBlur={onLeave(() => check('instruments'))}>
-          <InstrumentPicker options={options.instruments} value={instruments} onChange={setInstruments} error={errors.instruments} />
         </div>
       ) : null}
 
@@ -468,8 +458,7 @@ export default function OnboardingPage() {
   }
 
   const unlockedUpTo = firstIncompleteStep(profile);
-  // a finished profile opened via "Edit profile" starts at About you, where the photo lives
-  const step = chosenStep ?? (profile.onboarding_complete ? 0 : unlockedUpTo);
+  const step = chosenStep ?? unlockedUpTo;
   const goTo = (next: number) => {
     setChosenStep(next);
     window.scrollTo({ top: 0 });

@@ -24,6 +24,8 @@ urlpatterns = [
     path('api/v1/auth/', include('accounts.urls')),
     path('api/v1/profile/', include('profiles.urls')),
     path('api/v1/posts/', include('posts.urls')),
+    path('api/v1/productions/', include('productions.urls')),
+    path('api/v1/feed/', include('social.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

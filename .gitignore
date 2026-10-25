@@ -59,3 +59,6 @@ backend/media/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Uploaded media (profile pictures, posters)
+backend/media/

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    ArtistDirectoryAPIView,
     DocumentAPIView,
     DocumentsAPIView,
     LanguagesAPIView,
@@ -15,6 +16,7 @@ from .views import (
 
 urlpatterns = [
     path('', ProfileAPIView.as_view(), name='profile'),
+    path('directory/', ArtistDirectoryAPIView.as_view(), name='profile-directory'),
     path('options/', ProfileOptionsAPIView.as_view(), name='profile-options'),
     path('username-check/', UsernameCheckAPIView.as_view(), name='profile-username-check'),
     path('documents/', DocumentsAPIView.as_view(), name='profile-documents'),

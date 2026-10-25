@@ -1,12 +1,19 @@
 import { clearSession, readSession, saveSession } from '@bharini/auth';
 import type {
   ApiEnvelope,
+  ArtistDirectoryFilters,
+  ArtistDirectoryProfile,
   ArtistProfile,
   AuthUser,
+  CastingCallDetails,
+  CursorPage,
+  HomePost,
   PhotoSlot,
   Post,
+  PostComment,
   ProfileLanguage,
   ProfileOptions,
+  Production,
   TokenPair,
   UsernameCheck,
 } from '@bharini/types';
@@ -21,7 +28,11 @@ export type ApiClientOptions = {
 export type AuthApiResponse<T> = ApiEnvelope<T>;
 
 export class ApiError extends Error {
-  constructor(message: string, public fieldErrors: Record<string, string[]> = {}, public status = 0) {
+  constructor(
+    message: string,
+    public fieldErrors: Record<string, string[]> = {},
+    public status = 0,
+  ) {
     super(message);
   }
 }
@@ -40,10 +51,18 @@ export class ApiClient {
     this.credentials = options.credentials ?? 'include';
   }
 
-  setSession(session: Partial<{ accessToken: string | null; refreshToken: string | null }>) {
+  setSession(
+    session: Partial<{
+      accessToken: string | null;
+      refreshToken: string | null;
+    }>,
+  ) {
     this.accessToken = session.accessToken ?? this.accessToken ?? null;
     this.refreshToken = session.refreshToken ?? this.refreshToken ?? null;
-    saveSession({ accessToken: this.accessToken, refreshToken: this.refreshToken });
+    saveSession({
+      accessToken: this.accessToken,
+      refreshToken: this.refreshToken,
+    });
   }
 
   clearSession() {
@@ -73,6 +92,27 @@ export class ApiClient {
     );
   }
 
+  // parallel 401s share one refresh: rotation blacklists the old refresh token, so a second spend would fail and wipe the session
+  private refreshInFlight: Promise<string | null> | null = null;
+
+  private refreshAccessToken(): Promise<string | null> {
+    this.refreshInFlight ??= (async () => {
+      try {
+        const refreshToken = this.refreshToken;
+        if (!refreshToken) return null;
+        const refreshed = await this.refresh(refreshToken);
+        const nextAccessToken = refreshed.data?.access ?? null;
+        if (nextAccessToken) {
+          this.setSession({ accessToken: nextAccessToken, refreshToken: refreshed.data?.refresh ?? refreshToken });
+        }
+        return nextAccessToken;
+      } finally {
+        this.refreshInFlight = null;
+      }
+    })();
+    return this.refreshInFlight;
+  }
+
   private async requestInternal<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
     const headers = new Headers(init.headers ?? {});
     // FormData needs the browser to set its own multipart boundary
@@ -85,6 +125,7 @@ export class ApiClient {
       headers.set('Authorization', `Bearer ${this.accessToken}`);
     }
 
+    const sentAccessToken = this.accessToken;
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers,
@@ -96,14 +137,10 @@ export class ApiClient {
 
     if (response.status === 401 && !isRetry && this.refreshToken && !publicAuthEndpoint) {
       try {
-        const refreshed = await this.refresh(this.refreshToken);
-        const nextAccessToken = refreshed.data?.access ?? null;
-        const nextRefreshToken = refreshed.data?.refresh ?? this.refreshToken;
-
-        if (nextAccessToken) {
-          this.setSession({ accessToken: nextAccessToken, refreshToken: nextRefreshToken });
-          return this.requestInternal<T>(path, init, true);
-        }
+        // a parallel request may already have refreshed while this one was in flight
+        const alreadyRefreshed = Boolean(this.accessToken) && this.accessToken !== sentAccessToken;
+        const nextAccessToken = alreadyRefreshed ? this.accessToken : await this.refreshAccessToken();
+        if (nextAccessToken) return this.requestInternal<T>(path, init, true);
       } catch {
         this.clearSession();
       }
@@ -181,8 +218,8 @@ export class ApiClient {
     });
   }
 
-  /** Full-page URL that starts Google sign-in on the backend (django-allauth). */
-  socialLoginUrl(provider: 'google', role?: string) {
+  /** Full-page URL that starts Google/Facebook sign-in on the backend (django-allauth). */
+  socialLoginUrl(provider: 'google' | 'facebook', role?: string) {
     return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${role ? `?role=${encodeURIComponent(role)}` : ''}`;
   }
 
@@ -228,15 +265,22 @@ export class ApiClient {
   uploadMedia(discipline: string, slot: string, file: File) {
     const body = new FormData();
     body.append('file', file);
-    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, { method: 'PUT', body });
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, {
+      method: 'PUT',
+      body,
+    });
   }
 
   deleteMedia(discipline: string, slot: string) {
-    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, { method: 'DELETE' });
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, {
+      method: 'DELETE',
+    });
   }
 
   checkUsername(username: string) {
-    return this.request<AuthApiResponse<UsernameCheck>>(`/api/v1/profile/username-check/?username=${encodeURIComponent(username)}`);
+    return this.request<AuthApiResponse<UsernameCheck>>(
+      `/api/v1/profile/username-check/?username=${encodeURIComponent(username)}`,
+    );
   }
 
   addDocument(kind: string, title: string, file: File) {
@@ -251,27 +295,113 @@ export class ApiClient {
     return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/documents/${id}/`, { method: 'DELETE' });
   }
 
+  listArtistProfiles(filters: ArtistDirectoryFilters = {}) {
+    const entries = Object.entries(filters).filter(([, value]) => value !== undefined && value !== '');
+    const query = new URLSearchParams(entries.map(([key, value]) => [key, String(value)])).toString();
+    return this.request<AuthApiResponse<{ results: ArtistDirectoryProfile[] }>>(
+      `/api/v1/profile/directory/${query ? `?${query}` : ''}`,
+    );
+  }
+
+  getMyProduction() {
+    return this.request<AuthApiResponse<Production | null>>('/api/v1/productions/me/');
+  }
+
+  createProduction(payload: FormData | Record<string, unknown>) {
+    return this.request<AuthApiResponse<Production>>('/api/v1/productions/', {
+      method: 'POST',
+      body: payload instanceof FormData ? payload : JSON.stringify(payload),
+    });
+  }
+
+  getProduction(id: number) {
+    return this.request<AuthApiResponse<Production>>(`/api/v1/productions/${id}/`);
+  }
+
+  listPosts(cursor: string | null = null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.request<AuthApiResponse<CursorPage<Post>>>(`/api/v1/feed/${query}`);
+  }
+
+  listProductionPosts(productionId: number, cursor: string | null = null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.request<AuthApiResponse<CursorPage<Post>>>(`/api/v1/productions/${productionId}/posts/${query}`);
+  }
+
+  createPost(body: string, media?: File | null): Promise<AuthApiResponse<HomePost>>;
+  createPost(
+    payload: {
+      post_type: 'casting_call';
+      body: string;
+      casting: CastingCallDetails;
+    },
+    media?: File | null,
+  ): Promise<AuthApiResponse<Post>>;
+  createPost(
+    bodyOrPayload:
+      | string
+      | {
+          post_type: 'casting_call';
+          body: string;
+          casting: CastingCallDetails;
+        },
+    media?: File | null,
+  ): Promise<AuthApiResponse<HomePost> | AuthApiResponse<Post>> {
+    if (typeof bodyOrPayload === 'string') {
+      const form = new FormData();
+      form.append('body', bodyOrPayload);
+      if (media) form.append('media', media);
+      return this.request<AuthApiResponse<HomePost>>('/api/v1/posts/', {
+        method: 'POST',
+        body: form,
+      });
+    }
+    if (media) {
+      const form = new FormData();
+      form.append('post_type', bodyOrPayload.post_type);
+      form.append('body', bodyOrPayload.body);
+      form.append('casting', JSON.stringify(bodyOrPayload.casting));
+      form.append('image', media);
+      return this.request<AuthApiResponse<Post>>('/api/v1/feed/', { method: 'POST', body: form });
+    }
+    return this.request<AuthApiResponse<Post>>('/api/v1/feed/', {
+      method: 'POST',
+      body: JSON.stringify(bodyOrPayload),
+    });
+  }
+
+  likePost(id: number) {
+    return this.request<AuthApiResponse<{ like_count: number; is_liked: boolean }>>(`/api/v1/feed/${id}/like/`, {
+      method: 'POST',
+    });
+  }
+
+  unlikePost(id: number) {
+    return this.request<AuthApiResponse<{ like_count: number; is_liked: boolean }>>(`/api/v1/feed/${id}/like/`, {
+      method: 'DELETE',
+    });
+  }
+
+  sharePost(id: number) {
+    return this.request<AuthApiResponse<{ share_count: number }>>(`/api/v1/feed/${id}/share/`, {
+      method: 'POST',
+    });
+  }
+
+  listComments(postId: number, cursor: string | null = null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.request<AuthApiResponse<CursorPage<PostComment>>>(`/api/v1/feed/${postId}/comments/${query}`);
+  }
+
+  addComment(postId: number, body: string) {
+    return this.request<AuthApiResponse<PostComment>>(`/api/v1/feed/${postId}/comments/`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    });
+  }
+
   getPosts() {
-    return this.request<AuthApiResponse<{ posts: Post[] }>>('/api/v1/posts/');
-  }
-
-  createPost(body: string, media?: File | null) {
-    const form = new FormData();
-    form.append('body', body);
-    if (media) form.append('media', media);
-    return this.request<AuthApiResponse<Post>>('/api/v1/posts/', { method: 'POST', body: form });
-  }
-
-  updatePost(id: number, changes: { body: string; media?: File | null; removeMedia?: boolean }) {
-    const form = new FormData();
-    form.append('body', changes.body);
-    if (changes.media) form.append('media', changes.media);
-    if (changes.removeMedia) form.append('remove_media', 'true');
-    return this.request<AuthApiResponse<Post>>(`/api/v1/posts/${id}/`, { method: 'PATCH', body: form });
-  }
-
-  deletePost(id: number) {
-    return this.request<AuthApiResponse<null>>(`/api/v1/posts/${id}/`, { method: 'DELETE' });
+    return this.request<AuthApiResponse<{ posts: HomePost[] }>>('/api/v1/posts/');
   }
 
   sendAltEmailPin() {

@@ -55,15 +55,11 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
 ]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -126,9 +122,12 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
     'accounts',
     'profiles',
     'posts',
+    'productions',
+    'social',
 ]
 
 MIDDLEWARE = [
@@ -149,7 +148,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Social login (django-allauth). Email/password stays on our JWT API; allauth only runs the
-# Google OAuth dance, then accounts.views.SocialCompleteView hands the frontend JWTs.
+# Google/Facebook OAuth dance, then accounts.views.SocialCompleteView hands the frontend JWTs.
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
@@ -165,6 +164,12 @@ SOCIALACCOUNT_PROVIDERS = {
         'SCOPE': ['profile', 'email'],
         'APPS': [{'client_id': os.getenv('GOOGLE_CLIENT_ID', ''), 'secret': os.getenv('GOOGLE_CLIENT_SECRET', '')}]
         if os.getenv('GOOGLE_CLIENT_ID') else [],
+    },
+    'facebook': {
+        'SCOPE': ['email', 'public_profile'],
+        'FIELDS': ['id', 'email', 'first_name', 'last_name'],
+        'APPS': [{'client_id': os.getenv('FACEBOOK_APP_ID', ''), 'secret': os.getenv('FACEBOOK_APP_SECRET', '')}]
+        if os.getenv('FACEBOOK_APP_ID') else [],
     },
 }
 

@@ -19,7 +19,9 @@ export function AppHeader() {
   return (
     <header className="flex items-center justify-between gap-3">
       <Link href="/home" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">B</span>
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">
+          B
+        </span>
         <span>Bharini</span>
       </Link>
       <nav className="flex items-center gap-4 text-sm">
@@ -29,6 +31,16 @@ export function AppHeader() {
         {user?.role === 'artist' ? (
           <Link href="/dashboard" className="text-slate-300 hover:text-white">
             My profile
+          </Link>
+        ) : null}
+        {user?.role === 'production_house' ? (
+          <Link href="/search" className="text-slate-300 hover:text-white">
+            Search
+          </Link>
+        ) : null}
+        {user?.role === 'production_house' ? (
+          <Link href="/productions/me" className="text-slate-300 hover:text-white">
+            Production profile
           </Link>
         ) : null}
         <button type="button" onClick={() => void handleLogout()} className={secondaryButton}>

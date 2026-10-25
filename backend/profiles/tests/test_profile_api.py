@@ -155,16 +155,6 @@ class ProfileApiTests(TestCase):
         self.assertEqual([item['title'] for item in response.data['data']['documents']], ['Award'])
         self.assertFalse(document.file.storage.exists(document.file.name))
 
-    def test_instruments_required_for_musicians_and_accept_others(self, check_face_mock):
-        data = self.client.patch('/api/v1/profile/', {'disciplines': ['musician']}, format='json').data['data']
-        self.assertIn('instruments', data['missing_fields'])
-        response = self.client.patch('/api/v1/profile/', {'instruments': ['Tabla', ' Morsing ', 'tabla']}, format='json')
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['data']['instruments'], ['Tabla', 'Morsing'])
-        self.assertNotIn('instruments', response.data['data']['missing_fields'])
-        response = self.client.patch('/api/v1/profile/', {'instruments': [f'Drum {i}' for i in range(21)]}, format='json')
-        self.assertEqual(response.status_code, 400)
-
     def test_height_required_only_for_actors(self, check_face_mock):
         data = self.client.patch('/api/v1/profile/', {'disciplines': ['singer']}, format='json').data['data']
         self.assertNotIn('height_cm', data['missing_fields'])
@@ -299,3 +289,36 @@ class FaceCheckTests(TestCase):
     def test_blank_image_has_no_face(self):
         with self.assertRaises(ValidationError):
             check_face(Image.new('RGB', (400, 400), (200, 200, 200)), 'profile')
+
+
+class ArtistDirectoryFilterTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(User.objects.create_user('viewer@example.com', 'StrongPass123!', role='production_house'))
+        today = timezone.localdate()
+        self.young_actor = self.make_artist('young@example.com', ['actor'], 'female', today.replace(year=today.year - 22))
+        self.older_singer = self.make_artist('older@example.com', ['singer'], 'male', today.replace(year=today.year - 40))
+        self.no_dob = self.make_artist('nodob@example.com', ['actor'], 'female', None)
+
+    def make_artist(self, email, disciplines, gender, date_of_birth):
+        user = User.objects.create_user(email, 'StrongPass123!', role='artist')
+        return ArtistProfile.objects.create(user=user, disciplines=disciplines, gender=gender, date_of_birth=date_of_birth)
+
+    def ids(self, **params):
+        response = self.client.get('/api/v1/profile/directory/', params)
+        self.assertEqual(response.status_code, 200)
+        return {item['id'] for item in response.json()['data']['results']}
+
+    def test_filters_by_age_gender_and_discipline(self):
+        self.assertEqual(self.ids(age_min=20, age_max=25), {self.young_actor.id})
+        self.assertEqual(self.ids(age_min=30), {self.older_singer.id})
+        self.assertEqual(self.ids(gender='female'), {self.young_actor.id, self.no_dob.id})
+        self.assertEqual(self.ids(discipline='singer'), {self.older_singer.id})
+        self.assertEqual(self.ids(gender='female', discipline='actor', age_max=25), {self.young_actor.id})
+
+    def test_filters_by_language(self):
+        self.young_actor.languages.create(language='hindi', level='fluent')
+        self.assertEqual(self.ids(language='hindi'), {self.young_actor.id})
+
+    def test_invalid_filter_is_rejected(self):
+        self.assertEqual(self.client.get('/api/v1/profile/directory/', {'gender': 'alien'}).status_code, 400)

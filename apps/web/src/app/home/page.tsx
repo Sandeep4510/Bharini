@@ -1,21 +1,31 @@
 /* eslint-disable @next/next/no-img-element -- post images are served by the API host */
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { ApiError, apiClient } from '@bharini/api-client';
 import { readSession } from '@bharini/auth';
-import type { Post } from '@bharini/types';
+import type { ArtistDirectoryProfile, HomePost, Production } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
+import { ArtistCard } from '@/components/artist-card';
 import { useAuth } from '@/components/auth-provider';
-import { ErrorBanner, errorMessage, fieldErrorsFrom, inputClass, okBorder, primaryButton, secondaryButton } from '@/components/profile-fields';
+import {
+  ErrorBanner,
+  errorMessage,
+  fieldErrorsFrom,
+  inputClass,
+  okBorder,
+  primaryButton,
+  secondaryButton,
+} from '@/components/profile-fields';
 
 const BODY_LIMIT = 5000;
 const VIDEO_MAX_MB = 100;
 
-function Composer({ onPosted }: { onPosted: (post: Post) => void }) {
+function Composer({ onPosted }: { onPosted: (post: HomePost) => void }) {
   const [body, setBody] = useState('');
   const [media, setMedia] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
@@ -25,7 +35,8 @@ function Composer({ onPosted }: { onPosted: (post: Post) => void }) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!body.trim()) return setError('Write something to post.');
-    if (media?.type.startsWith('video/') && media.size > VIDEO_MAX_MB * 1024 * 1024) return setError(`Video is too large (max ${VIDEO_MAX_MB} MB).`);
+    if (media?.type.startsWith('video/') && media.size > VIDEO_MAX_MB * 1024 * 1024)
+      return setError(`Video is too large (max ${VIDEO_MAX_MB} MB).`);
     setBusy(true);
     setError('');
     try {
@@ -71,125 +82,19 @@ function Composer({ onPosted }: { onPosted: (post: Post) => void }) {
   );
 }
 
-const smallButton = 'rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50';
-
-/** The home feed only lists the viewer's own posts, so every card can be edited or deleted. */
-function PostCard({ post, onChanged, onDeleted }: { post: Post; onChanged: (post: Post) => void; onDeleted: (id: number) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [body, setBody] = useState(post.body);
-  const [media, setMedia] = useState<File | null>(null);
-  const [removeMedia, setRemoveMedia] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const startEditing = () => {
-    setBody(post.body);
-    setMedia(null);
-    setRemoveMedia(false);
-    setError('');
-    setEditing(true);
-  };
-
-  const save = async () => {
-    if (!body.trim()) return setError('Write something to post.');
-    setBusy(true);
-    setError('');
-    try {
-      const response = await apiClient.updatePost(post.id, { body: body.trim(), media, removeMedia });
-      if (response.data) onChanged(response.data);
-      setEditing(false);
-    } catch (caughtError) {
-      setError(Object.values(fieldErrorsFrom(caughtError))[0] || errorMessage(caughtError, 'Could not save.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async () => {
-    setBusy(true);
-    try {
-      await apiClient.deletePost(post.id);
-      onDeleted(post.id);
-    } catch (caughtError) {
-      setError(errorMessage(caughtError, 'Could not delete.'));
-      setBusy(false);
-    }
-  };
-
+function PostCard({ post }: { post: HomePost }) {
   return (
     <article className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-slate-400">
-          {post.author_name} · {new Date(post.created_at).toLocaleString()}
-        </p>
-        {!editing ? (
-          <div className="flex shrink-0 gap-2">
-            {confirmDelete ? (
-              <>
-                <span className="self-center text-xs text-slate-300">Delete this post?</span>
-                <button type="button" disabled={busy} onClick={() => void remove()} className={`${smallButton} bg-red-500/80 text-white hover:bg-red-500`}>
-                  {busy ? 'Deleting…' : 'Delete'}
-                </button>
-                <button type="button" onClick={() => setConfirmDelete(false)} className={`${smallButton} border border-slate-700 text-slate-200`}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" onClick={startEditing} className={`${smallButton} border border-slate-700 text-slate-200 hover:border-slate-500`}>
-                  Edit
-                </button>
-                <button type="button" onClick={() => setConfirmDelete(true)} className={`${smallButton} border border-slate-700 text-slate-200 hover:border-red-400 hover:text-red-200`}>
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {error ? <div className="mt-2"><ErrorBanner message={error} /></div> : null}
-
-      {editing ? (
-        <div className="mt-3 space-y-3">
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={BODY_LIMIT} rows={4} className={`${inputClass} ${okBorder} resize-y`} />
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <label className={`${secondaryButton} cursor-pointer`}>
-              {media ? `📎 ${media.name}` : post.media ? '🖼️ Replace image / video' : '🖼️ Add image / video'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-                className="hidden"
-                onChange={(event) => {
-                  setMedia(event.target.files?.[0] ?? null);
-                  setRemoveMedia(false);
-                }}
-              />
-            </label>
-            {post.media && !media ? (
-              <label className="inline-flex items-center gap-2 text-slate-300">
-                <input type="checkbox" checked={removeMedia} onChange={(event) => setRemoveMedia(event.target.checked)} className="h-4 w-4" />
-                Remove attachment
-              </label>
-            ) : null}
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setEditing(false)} className={secondaryButton}>
-              Cancel
-            </button>
-            <button type="button" disabled={busy} onClick={() => void save()} className={primaryButton}>
-              {busy ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <p className="mt-2 whitespace-pre-line text-slate-100">{post.body}</p>
-          {post.media && post.media_kind === 'image' ? <img src={post.media} alt="" className="mt-3 max-h-96 rounded-xl object-contain" /> : null}
-          {post.media && post.media_kind === 'video' ? <video src={post.media} controls className="mt-3 max-h-96 w-full rounded-xl" /> : null}
-        </>
-      )}
+      <p className="text-xs text-slate-400">
+        {post.author_name} · {new Date(post.created_at).toLocaleString()}
+      </p>
+      <p className="mt-2 whitespace-pre-line text-slate-100">{post.body}</p>
+      {post.media && post.media_kind === 'image' ? (
+        <img src={post.media} alt="" className="mt-3 max-h-96 rounded-xl object-contain" />
+      ) : null}
+      {post.media && post.media_kind === 'video' ? (
+        <video src={post.media} controls className="mt-3 max-h-96 w-full rounded-xl" />
+      ) : null}
     </article>
   );
 }
@@ -197,22 +102,36 @@ function PostCard({ post, onChanged, onDeleted }: { post: Post; onChanged: (post
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-
+  const isProductionHouse = user?.role === 'production_house';
+  const [posts, setPosts] = useState<HomePost[]>([]);
+  const [production, setProduction] = useState<Production | null>(null);
+  const [artists, setArtists] = useState<ArtistDirectoryProfile[]>([]);
   useEffect(() => {
     if (!readSession().accessToken) {
       router.replace('/auth/login');
       return;
     }
     let cancelled = false;
-    apiClient
-      .getPosts()
-      .then((response) => {
-        if (!cancelled) setPosts(response.data?.posts ?? []);
-      })
-      .catch((caughtError) => {
-        if (caughtError instanceof ApiError && caughtError.status === 401) router.replace('/auth/login');
-      });
+    Promise.allSettled([apiClient.getPosts(), apiClient.getMyProduction(), apiClient.listArtistProfiles()]).then(
+      (results) => {
+        if (cancelled) return;
+        const [postsResult, productionResult, artistsResult] = results;
+
+        if (postsResult.status === 'fulfilled') {
+          setPosts(postsResult.value.data?.posts ?? []);
+        } else if (postsResult.reason instanceof ApiError && postsResult.reason.status === 401) {
+          router.replace('/auth/login');
+        }
+
+        if (productionResult.status === 'fulfilled') {
+          setProduction(productionResult.value.data ?? null);
+        }
+
+        if (artistsResult.status === 'fulfilled') {
+          setArtists(artistsResult.value.data?.results ?? []);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -227,33 +146,86 @@ export default function HomePage() {
       <div className="mx-auto max-w-3xl space-y-6">
         <AppHeader />
 
+        {isProductionHouse ? null : (
+          <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 className="text-2xl font-semibold">Production Profile</h1>
+              <Link href="/productions/me" className={secondaryButton}>
+                Open profile
+              </Link>
+            </div>
+
+            {production ? (
+              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <div className="flex items-center gap-3">
+                  {production.profile_picture ? (
+                    <img
+                      src={production.profile_picture}
+                      alt={production.name}
+                      className="h-14 w-14 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-violet-500 text-xl font-semibold text-white">
+                      {production.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-violet-300">
+                      {production.kind === 'house' ? 'Production house' : 'Individual producer'}
+                    </p>
+                    <p className="text-lg font-semibold text-white">{production.name}</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm text-slate-300">
+                  <p>
+                    <span className="font-semibold text-slate-100">Movies worked:</span>{' '}
+                    {formatTitleCredits(production, 'movie')}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-100">Serials worked:</span>{' '}
+                    {formatTitleCredits(production, 'serial')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-300">
+                Set up your production house profile with name, photo, and movie/serial credits.
+              </p>
+            )}
+          </section>
+        )}
+
+        {/*<section className="space-y-3">*/}
+        {/*  {artists.length ? (*/}
+        {/*    <div className="grid gap-3 sm:grid-cols-2">*/}
+        {/*      {artists.map((artist) => (*/}
+        {/*        <ArtistCard key={artist.id} artist={artist} />*/}
+        {/*      ))}*/}
+        {/*    </div>*/}
+        {/*  ) : (*/}
+        {/*    <p className="text-sm text-slate-400">No artist profiles match.</p>*/}
+        {/*  )}*/}
+        {/*</section>*/}
+
         <section className="space-y-3">
-          <h1 className="text-2xl font-semibold">Share something</h1>
+          <h2 className="text-2xl font-semibold">Share something</h2>
           <Composer onPosted={(post) => setPosts((previous) => [post, ...previous])} />
           {posts.length ? (
             <div className="space-y-3">
               <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Your posts</p>
               {posts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  onChanged={(changed) => setPosts((previous) => previous.map((item) => (item.id === changed.id ? changed : item)))}
-                  onDeleted={(id) => setPosts((previous) => previous.filter((item) => item.id !== id))}
-                />
+                <PostCard key={post.id} post={post} />
               ))}
             </div>
           ) : null}
         </section>
-
-        <section className="space-y-3">
-          <h2 className="text-xl font-semibold">Opportunities for you</h2>
-          {/* shortcut: no opportunities exist yet; matched-then-other opportunities render here once casting calls ship */}
-          <div className="rounded-3xl border border-dashed border-slate-700 px-6 py-16 text-center">
-            <p className="text-3xl">🎬</p>
-            <p className="mt-3 text-lg text-slate-200">You read everything, come back for more.</p>
-          </div>
-        </section>
       </div>
     </main>
   );
+}
+
+function formatTitleCredits(production: Production, kind: 'movie' | 'serial') {
+  const items = production.title_credits.filter((credit) => credit.kind === kind);
+  if (!items.length) return '—';
+  return items.map((item) => `${item.name}${item.release_year ? ` (${item.release_year})` : ''}`).join(', ');
 }

@@ -16,8 +16,10 @@ from accounts.mail import send_mail_in_background
 from accounts.responses import error_response, ok_response
 
 from .media import process_photo, validate_document, validate_media
-from .models import INSTRUMENTS, LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, PortfolioMedia, ProfileDocument, ProfileLanguage
+from .models import LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Discipline, PortfolioMedia, ProfileDocument, ProfileLanguage
 from .serializers import (
+    ArtistDirectoryFilterSerializer,
+    ArtistDirectorySerializer,
     ArtistProfileSerializer,
     LanguageListSerializer,
     PinSerializer,
@@ -82,8 +84,38 @@ class ProfileOptionsAPIView(APIView):
             'languages': options(LANGUAGES),
             'language_levels': options(ProfileLanguage.Level.choices),
             'document_kinds': options(ProfileDocument.Kind.choices),
-            'instruments': [{'value': name, 'label': name} for name in INSTRUMENTS],
         })
+
+
+def years_ago(years):
+    today = timezone.localdate()
+    try:
+        return today.replace(year=today.year - years)
+    except ValueError:  # 29 Feb with a non-leap target year
+        return today.replace(year=today.year - years, month=2, day=28)
+
+
+class ArtistDirectoryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        filters = ArtistDirectoryFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        params = filters.validated_data
+        profiles = ArtistProfile.objects.select_related('user').exclude(disciplines=[])
+        if 'age_min' in params:
+            profiles = profiles.filter(date_of_birth__lte=years_ago(params['age_min']))
+        if 'age_max' in params:
+            profiles = profiles.filter(date_of_birth__gt=years_ago(params['age_max'] + 1))
+        if 'gender' in params:
+            profiles = profiles.filter(gender=params['gender'])
+        if 'discipline' in params:
+            profiles = profiles.filter(disciplines__contains=[params['discipline']])
+        if 'language' in params:
+            profiles = profiles.filter(languages__language=params['language']).distinct()
+        profiles = profiles.order_by('-updated_at')[:60]
+        data = ArtistDirectorySerializer(profiles, many=True, context={'request': request}).data
+        return ok_response(request, message='Artist directory.', data={'results': data})
 
 
 class ProfileAPIView(ArtistAPIView):
