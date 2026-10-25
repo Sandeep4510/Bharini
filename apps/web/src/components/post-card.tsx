@@ -6,6 +6,8 @@ import { useState, type FormEvent } from 'react';
 import { apiClient } from '@bharini/api-client';
 import type { CastingCallDetails, Post, PostComment } from '@bharini/types';
 
+import { ShareButton } from '@/components/share-menu';
+
 const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 function CastingDetails({ casting }: { casting: CastingCallDetails }) {
@@ -78,20 +80,11 @@ export function PostCard({ post: initial }: { post: Post }) {
     }
   };
 
-  const share = async () => {
-    setError(null);
-    try {
-      const res = await apiClient.sharePost(post.id);
-      if (res.data)
-        setPost((current) => ({
-          ...current,
-          share_count: res.data?.share_count ?? current.share_count,
-        }));
-      await navigator.clipboard?.writeText(`${window.location.origin}/productions/${production.id}#post-${post.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not share post.');
-    }
-  };
+  const countShare = () =>
+    apiClient
+      .sharePost(post.id)
+      .then((res) => setPost((current) => ({ ...current, share_count: res.data?.share_count ?? current.share_count })))
+      .catch(() => undefined); // the count is cosmetic; the share itself already happened
 
   const { production } = post;
   const initialLetter = production.name.charAt(0).toUpperCase();
@@ -120,8 +113,15 @@ export function PostCard({ post: initial }: { post: Post }) {
           </span>
         </Link>
         {post.post_type === 'casting_call' && (
-          <span className="rounded-full bg-violet-500 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white">
-            Casting call
+          <span className="flex shrink-0 flex-wrap justify-end gap-2">
+            {post.near_you ? (
+              <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                📍 Near you
+              </span>
+            ) : null}
+            <span className="rounded-full bg-violet-500 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white">
+              Casting call
+            </span>
           </span>
         )}
       </header>
@@ -158,13 +158,14 @@ export function PostCard({ post: initial }: { post: Post }) {
         >
           💬 Comment · {post.comment_count}
         </button>
-        <button
-          type="button"
-          onClick={() => void share()}
+        <ShareButton
+          post={{ kind: 'production', id: post.id }}
+          path={`/productions/${production.id}#post-${post.id}`}
+          title={`Post by ${production.name}`}
+          label={`↗ Share · ${post.share_count}`}
+          onShared={() => void countShare()}
           className="rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
-        >
-          ↗ Share · {post.share_count}
-        </button>
+        />
       </footer>
 
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}

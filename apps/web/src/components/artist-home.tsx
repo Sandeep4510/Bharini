@@ -5,11 +5,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { ApiError, apiClient } from '@bharini/api-client';
 import { readSession } from '@bharini/auth';
-import type { ArtistPost } from '@bharini/types';
+import type { ArtistPost, Post } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
 import { useAuth } from '@/components/auth-provider';
-import { BODY_LIMIT, PostCard } from '@/components/artist-post-card';
+import { BODY_LIMIT, PostCard, replacePost } from '@/components/artist-post-card';
+import { PostCard as CastingCallCard } from '@/components/post-card';
 import {
   ErrorBanner,
   errorMessage,
@@ -83,6 +84,7 @@ export function ArtistHome() {
   const router = useRouter();
   const { user } = useAuth();
   const [posts, setPosts] = useState<ArtistPost[]>([]);
+  const [opportunities, setOpportunities] = useState<Post[]>([]);
 
   useEffect(() => {
     if (!readSession().accessToken) {
@@ -98,6 +100,12 @@ export function ArtistHome() {
       .catch((caughtError) => {
         if (caughtError instanceof ApiError && caughtError.status === 401) router.replace('/auth/login');
       });
+    apiClient
+      .getOpportunities()
+      .then((response) => {
+        if (!cancelled) setOpportunities(response.data?.posts ?? []);
+      })
+      .catch(() => undefined); // the feed still works without casting calls
     return () => {
       cancelled = true;
     };
@@ -110,21 +118,23 @@ export function ArtistHome() {
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-3xl space-y-6">
-        <AppHeader />
+        <AppHeader greet />
 
         <section className="space-y-3">
           <h1 className="text-2xl font-semibold">Share something</h1>
           <Composer onPosted={(post) => setPosts((previous) => [post, ...previous])} />
-          {posts.length ? (
+          {posts.length || opportunities.length ? (
             <div className="space-y-3">
               <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Feed · people you follow first</p>
+              {/* casting calls lead the feed, ones in your city first */}
+              {opportunities.map((post) => (
+                <CastingCallCard key={`casting-${post.id}`} post={post} />
+              ))}
               {posts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
-                  onChanged={(changed) =>
-                    setPosts((previous) => previous.map((item) => (item.id === changed.id ? changed : item)))
-                  }
+                  onChanged={(changed) => setPosts((previous) => replacePost(previous, changed))}
                   onDeleted={(id) => setPosts((previous) => previous.filter((item) => item.id !== id))}
                 />
               ))}
@@ -132,14 +142,6 @@ export function ArtistHome() {
           ) : null}
         </section>
 
-        <section className="space-y-3">
-          <h2 className="text-xl font-semibold">Opportunities for you</h2>
-          {/* shortcut: no opportunities exist yet; matched-then-other opportunities render here once casting calls ship */}
-          <div className="rounded-3xl border border-dashed border-slate-700 px-6 py-16 text-center">
-            <p className="text-3xl">🎬</p>
-            <p className="mt-3 text-lg text-slate-200">You read everything, come back for more.</p>
-          </div>
-        </section>
       </div>
     </main>
   );

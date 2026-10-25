@@ -109,3 +109,28 @@ class PostAPITests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('image', str(response.json()))
+
+
+class OpportunitiesTests(APITestCase):
+    def test_casting_calls_in_my_city_come_first(self):
+        from profiles.models import ArtistProfile
+        from production_posts.models import CastingCall, Post as CastingPost
+
+        owner = User.objects.create_user('studio@example.com', 'StrongPass123!', role='production_house')
+        house = ProductionProfile.objects.create(owner=owner, kind='house', name='Studio')
+        artist = User.objects.create_user('actor@example.com', 'StrongPass123!', role='artist')
+        ArtistProfile.objects.create(user=artist, disciplines=['actor'], location='Mangaluru, Karnataka')
+
+        def casting(body, location):
+            post = CastingPost.objects.create(production=house, post_type='casting_call', body=body)
+            CastingCall.objects.create(post=post, age_min=18, age_max=30, languages='Kannada', location=location, approx_pay='Paid')
+            return post.id
+
+        local = casting('Local role', 'Mangaluru')
+        casting('Far role', 'Mumbai')  # newer, but not in my city
+        CastingPost.objects.create(production=house, body='Just an update')  # not a casting call
+
+        self.client.force_authenticate(artist)
+        posts = self.client.get('/api/v1/feed/opportunities/').data['data']['posts']
+        self.assertEqual([(p['body'], p['near_you']) for p in posts], [('Local role', True), ('Far role', False)])
+        self.assertEqual(posts[0]['id'], local)

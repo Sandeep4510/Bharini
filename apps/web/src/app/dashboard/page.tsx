@@ -1,15 +1,17 @@
-/* eslint-disable @next/next/no-img-element -- profile photo is served by the API host */
 'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { apiClient } from '@bharini/api-client';
 import type { ArtistProfile, ProfileOptions } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
 import { useAuth } from '@/components/auth-provider';
 import { CompletionBar } from '@/components/completion-bar';
+import { PhotoChangeButton } from '@/components/photo-change-button';
+import { AboutWithStatsFor } from '@/components/follow-stats';
 import { PortfolioEditor } from '@/components/portfolio-editor';
 import { ErrorBanner, secondaryButton } from '@/components/profile-fields';
 import { useArtistProfile } from '@/components/use-artist-profile';
@@ -32,14 +34,32 @@ function labelOf(options: ProfileOptions['languages'], value: string) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function ProfileHeader({ profile, options, name }: { profile: ArtistProfile; options: ProfileOptions; name: string }) {
+function ProfileHeader({
+  profile,
+  options,
+  name,
+  onProfile,
+}: {
+  profile: ArtistProfile;
+  options: ProfileOptions;
+  name: string;
+  onProfile: (profile: ArtistProfile) => void;
+}) {
   const facts = [ageFrom(profile.date_of_birth) && `${ageFrom(profile.date_of_birth)} yrs`, labelOf(options.genders, profile.gender), formatHeight(profile.height_cm), profile.location && `📍 ${profile.location}`].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-5 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 sm:flex-row sm:items-center">
-      <div className="h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-violet-500/60 bg-slate-950">
-        {profile.profile_photo ? <img src={profile.profile_photo} alt={name} className="h-full w-full object-cover" /> : null}
-      </div>
+      <PhotoChangeButton
+        src={profile.profile_photo}
+        alt={name}
+        fallback={name.charAt(0).toUpperCase()}
+        upload={async (file) => {
+          const body = new FormData();
+          body.append('profile_photo', file);
+          const response = await apiClient.updateProfile(body);
+          if (response.data) onProfile(response.data);
+        }}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap gap-2">
           {profile.disciplines.map((discipline) => (
@@ -92,7 +112,8 @@ export default function DashboardPage() {
           </div>
         ) : profile && options && profile.onboarding_complete ? (
           <>
-            <ProfileHeader profile={profile} options={options} name={name} />
+            <ProfileHeader profile={profile} options={options} name={name} onProfile={setProfile} />
+            {user ? <AboutWithStatsFor userId={user.id} bio={profile.bio} /> : null}
             <CompletionBar percent={profile.completion_percent} />
             <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 sm:p-8">
               <PortfolioEditor profile={profile} onProfile={setProfile} />

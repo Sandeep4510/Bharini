@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from connections.models import connection_status
+
 from .models import ProductionProfile, ProductionTitle
 
 
@@ -24,14 +26,36 @@ class TitleCreditSerializer(serializers.ModelSerializer):
 class ProductionSerializer(serializers.ModelSerializer):
     title_credits = TitleCreditSerializer(many=True, read_only=True)
     is_owner = serializers.SerializerMethodField()
+    owner_id = serializers.IntegerField(read_only=True)
+    follower_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+    connection = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductionProfile
-        fields = ['id', 'kind', 'name', 'profile_picture', 'title_credits', 'is_owner', 'created_at']
+        fields = [
+            'id', 'kind', 'name', 'profile_picture', 'title_credits', 'is_owner', 'created_at',
+            'owner_id', 'follower_count', 'following_count', 'is_following', 'connection',
+        ]
         read_only_fields = ['id', 'created_at']
 
     def get_is_owner(self, obj):
         return obj.owner_id == self.context['request'].user.id
+
+    # follows belong to the owner's account (artist_posts.Follow), so the production page shows theirs
+    def get_follower_count(self, obj):
+        return obj.owner.followers.count()
+
+    def get_following_count(self, obj):
+        return obj.owner.following.count()
+
+    def get_is_following(self, obj):
+        return obj.owner.followers.filter(follower=self.context['request'].user).exists()
+
+    def get_connection(self, obj):
+        viewer = self.context['request'].user
+        return 'none' if obj.owner_id == viewer.id else connection_status(viewer, obj.owner)
 
     def create(self, validated_data):
         user = self.context['request'].user

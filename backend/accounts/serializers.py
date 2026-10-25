@@ -50,12 +50,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     onboarding_complete = serializers.SerializerMethodField()
     completion_percent = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = (
             'id',
             'email',
+            'username',
             'first_name',
             'last_name',
             'role',
@@ -72,6 +74,10 @@ class UserSerializer(serializers.ModelSerializer):
             return True
         profile = getattr(obj, 'artist_profile', None)
         return bool(profile and profile.onboarding_complete)
+
+    def get_username(self, obj):
+        profile = getattr(obj, 'artist_profile', None)
+        return profile.username if profile else None
 
     def get_completion_percent(self, obj):
         profile = getattr(obj, 'artist_profile', None)

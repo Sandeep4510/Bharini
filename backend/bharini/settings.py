@@ -92,6 +92,8 @@ REST_FRAMEWORK = {
         'auth_verify': '20/minute',
         'auth_password_reset': '5/minute',
         'profile_pin': '5/minute',
+        'messages_send': '30/minute',
+        'connections': '30/minute',
     },
 }
 
@@ -122,12 +124,13 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
-    'allauth.socialaccount.providers.facebook',
     'accounts',
     'profiles',
     'artist_posts',
     'productions',
     'production_posts',
+    'messaging',
+    'connections',
 ]
 
 MIDDLEWARE = [
@@ -148,7 +151,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Social login (django-allauth). Email/password stays on our JWT API; allauth only runs the
-# Google/Facebook OAuth dance, then accounts.views.SocialCompleteView hands the frontend JWTs.
+# Google OAuth dance, then accounts.views.SocialCompleteView hands the frontend JWTs.
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
@@ -164,12 +167,6 @@ SOCIALACCOUNT_PROVIDERS = {
         'SCOPE': ['profile', 'email'],
         'APPS': [{'client_id': os.getenv('GOOGLE_CLIENT_ID', ''), 'secret': os.getenv('GOOGLE_CLIENT_SECRET', '')}]
         if os.getenv('GOOGLE_CLIENT_ID') else [],
-    },
-    'facebook': {
-        'SCOPE': ['email', 'public_profile'],
-        'FIELDS': ['id', 'email', 'first_name', 'last_name'],
-        'APPS': [{'client_id': os.getenv('FACEBOOK_APP_ID', ''), 'secret': os.getenv('FACEBOOK_APP_SECRET', '')}]
-        if os.getenv('FACEBOOK_APP_ID') else [],
     },
 }
 

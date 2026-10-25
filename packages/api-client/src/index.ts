@@ -3,21 +3,28 @@ import type {
   ApiEnvelope,
   ArtistDirectoryFilters,
   ArtistDirectoryProfile,
+  ArtistPost,
+  ArtistPostComment,
   ArtistProfile,
   AuthUser,
   CastingCallDetails,
+  ChatMessage,
+  ConnectionRequest,
+  ConnectionStatus,
+  Conversation,
   CursorPage,
-  ArtistPost,
-  ArtistPostComment,
+  FollowerResult,
   PhotoSlot,
   Post,
   PostComment,
-  PublicProfile,
+  Production,
   ProfileLanguage,
   ProfileOptions,
-  Production,
+  PublicProfile,
+  SharedPostRef,
   TokenPair,
   UsernameCheck,
+  UserSummary,
 } from '@bharini/types';
 
 export type ApiClientOptions = {
@@ -220,8 +227,8 @@ export class ApiClient {
     });
   }
 
-  /** Full-page URL that starts Google/Facebook sign-in on the backend (django-allauth). */
-  socialLoginUrl(provider: 'google' | 'facebook', role?: string) {
+  /** Full-page URL that starts Google sign-in on the backend (django-allauth). */
+  socialLoginUrl(provider: 'google', role?: string) {
     return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${role ? `?role=${encodeURIComponent(role)}` : ''}`;
   }
 
@@ -314,6 +321,14 @@ export class ApiClient {
       method: 'POST',
       body: payload instanceof FormData ? payload : JSON.stringify(payload),
     });
+  }
+
+  updateProduction(id: number, payload: FormData) {
+    return this.request<AuthApiResponse<Production>>(`/api/v1/productions/${id}/`, { method: 'PATCH', body: payload });
+  }
+
+  getOpportunities() {
+    return this.request<AuthApiResponse<{ posts: Post[] }>>('/api/v1/feed/opportunities/');
   }
 
   getProduction(id: number) {
@@ -441,6 +456,57 @@ export class ApiClient {
 
   deleteComment(postId: number, commentId: number) {
     return this.request<AuthApiResponse<null>>(`/api/v1/posts/${postId}/comments/${commentId}/`, { method: 'DELETE' });
+  }
+
+  getConversations() {
+    return this.request<AuthApiResponse<{ conversations: Conversation[] }>>('/api/v1/messages/conversations/');
+  }
+
+  startConversation(userId: number) {
+    return this.request<AuthApiResponse<Conversation>>('/api/v1/messages/conversations/', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  getMessages(conversationId: number, afterId?: number) {
+    const query = afterId ? `?after=${afterId}` : '';
+    return this.request<AuthApiResponse<{ conversation: Conversation; messages: ChatMessage[] }>>(
+      `/api/v1/messages/conversations/${conversationId}/messages/${query}`,
+    );
+  }
+
+  sendMessage(conversationId: number, body: string, shared?: SharedPostRef) {
+    return this.request<AuthApiResponse<ChatMessage>>(`/api/v1/messages/conversations/${conversationId}/messages/`, {
+      method: 'POST',
+      body: JSON.stringify({ body, ...(shared ? { [`shared_${shared.kind}_post_id`]: shared.id } : {}) }),
+    });
+  }
+
+  getMyConnections(query = '') {
+    return this.request<AuthApiResponse<{ connections: UserSummary[] }>>(
+      `/api/v1/users/me/connections/?q=${encodeURIComponent(query)}`,
+    );
+  }
+
+  setConnection(userId: number, connect: boolean) {
+    return this.request<AuthApiResponse<{ connection: ConnectionStatus }>>(`/api/v1/users/${userId}/connect/`, {
+      method: connect ? 'POST' : 'DELETE',
+    });
+  }
+
+  getConnectionRequests() {
+    return this.request<AuthApiResponse<{ requests: ConnectionRequest[] }>>('/api/v1/users/me/connection-requests/');
+  }
+
+  searchFollowers(query: string) {
+    return this.request<AuthApiResponse<{ followers: FollowerResult[] }>>(
+      `/api/v1/users/me/followers/?q=${encodeURIComponent(query)}`,
+    );
+  }
+
+  getUnreadMessageCount() {
+    return this.request<AuthApiResponse<{ unread: number }>>('/api/v1/messages/unread-count/');
   }
 
   getUserProfile(id: number) {

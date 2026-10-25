@@ -307,6 +307,13 @@ class ProfileApiTests(TestCase):
 
 
 class FaceCheckTests(TestCase):
+    def test_profile_photo_allows_more_than_one_face(self):
+        two = [(10, 10, 100, 100), (200, 10, 90, 90)]
+        with mock.patch('profiles.face._detect', return_value=two):
+            check_face(Image.new('RGB', (400, 400)), 'profile')  # no error
+            with self.assertRaises(ValidationError):
+                check_face(Image.new('RGB', (400, 400)), 'center')
+
     def test_blank_image_has_no_face(self):
         with self.assertRaises(ValidationError):
             check_face(Image.new('RGB', (400, 400), (200, 200, 200)), 'profile')

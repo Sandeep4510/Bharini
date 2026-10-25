@@ -24,19 +24,31 @@ node_modules/
 **/node_modules/
 .npm/
 .pnpm-store/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 .next/
 **/.next/
 .turbo/
 **/.turbo/
+.vercel
 out/
 dist/
 build/
 coverage/
 *.tsbuildinfo
 
-# Cache / temp files
+# Cache / temp files / logs
 .cache/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
 # IDE / editor settings
 .idea/
@@ -45,20 +57,25 @@ coverage/
 # Local databases and generated files
 *.sqlite3
 *.db
+
+# Uploaded media (profile pictures, posters)
 backend/media/
 
-# Local environment files
+# Secrets and local environment files (keep example templates in the repo)
+*.pem
 .env
 .env.*
 **/.env
 **/.env.*
 !**/.env.example
 !**/.env.local.example
+!**/.env.production.example
 !**/.env.sample
 
 # OS metadata
 .DS_Store
 Thumbs.db
 
-# Uploaded media (profile pictures, posters)
-backend/media/
+# Local helper scripts
+start_servers.bat
+stop_servers.bat

@@ -57,3 +57,16 @@ class ProductionProfileAPITests(APITestCase):
         response = self.client.post('/api/v1/productions/', {'name': 'X', 'kind': 'individual', 'profile_picture': fake}, format='multipart')
         self.assertEqual(response.status_code, 400)
         self.assertIn('profile_picture', response.json())
+
+
+class ProductionFollowCountsTests(APITestCase):
+    def test_production_page_shows_owner_follow_counts(self):
+        owner = User.objects.create_user('house@example.com', 'StrongPass123!', first_name='K', last_name='F', role='production_house')
+        fan = User.objects.create_user('fan@example.com', 'StrongPass123!', first_name='A', last_name='R', role='artist')
+        production = ProductionProfile.objects.create(owner=owner, kind='house', name='Kumar Films')
+        self.client.force_authenticate(fan)
+        data = self.client.get(f'/api/v1/productions/{production.id}/').data['data']
+        self.assertEqual((data['owner_id'], data['follower_count'], data['is_following']), (owner.id, 0, False))
+        self.client.post(f'/api/v1/users/{owner.id}/follow/')
+        data = self.client.get(f'/api/v1/productions/{production.id}/').data['data']
+        self.assertEqual((data['follower_count'], data['following_count'], data['is_following']), (1, 0, True))

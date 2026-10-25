@@ -29,6 +29,8 @@ urlpatterns = [
     path('api/v1/productions/', include('productions.urls')),
     path('api/v1/feed/', include('production_posts.urls')),
     path('api/v1/users/', include(user_urlpatterns)),
+    path('api/v1/users/', include('connections.urls')),
+    path('api/v1/messages/', include('messaging.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

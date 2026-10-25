@@ -2,14 +2,36 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+import { apiClient } from '@bharini/api-client';
 
 import { useAuth } from '@/components/auth-provider';
 import { secondaryButton } from '@/components/profile-fields';
 
-/** Header for signed-in pages: the logo always leads back to /home. */
-export function AppHeader() {
+/** Header for signed-in pages: the logo always leads back to /home. `greet` swaps the wordmark for "Hi <name>". */
+export function AppHeader({ greet = false }: { greet?: boolean }) {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const load = () =>
+      apiClient
+        .getUnreadMessageCount()
+        .then((response) => {
+          if (!cancelled) setUnread(response.data?.unread ?? 0);
+        })
+        .catch(() => undefined); // the badge is a hint; skip a failed check
+    void load();
+    const timer = window.setInterval(() => void load(), 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -22,15 +44,23 @@ export function AppHeader() {
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">
           B
         </span>
-        <span>Bharini</span>
+        <span>{greet && user ? `Hi ${user.username || user.first_name || 'there'}` : 'Bharini'}</span>
       </Link>
       <nav className="flex items-center gap-4 text-sm">
         <Link href="/home" className="text-slate-300 hover:text-white">
           Home
         </Link>
+        <Link href="/messages" className="relative text-slate-300 hover:text-white">
+          Messages
+          {unread ? (
+            <span className="absolute -right-3 -top-2 rounded-full bg-violet-500 px-1.5 text-[10px] font-semibold text-white" aria-label={`${unread} unread`}>
+              {unread > 99 ? '99+' : unread}
+            </span>
+          ) : null}
+        </Link>
         {user?.role === 'artist' ? (
           <Link href="/dashboard" className="text-slate-300 hover:text-white">
-            My profile
+            My Profile
           </Link>
         ) : null}
         {user?.role === 'production_house' ? (
@@ -40,7 +70,7 @@ export function AppHeader() {
         ) : null}
         {user?.role === 'production_house' ? (
           <Link href="/productions/me" className="text-slate-300 hover:text-white">
-            Production profile
+            My Profile
           </Link>
         ) : null}
         <button type="button" onClick={() => void handleLogout()} className={secondaryButton}>

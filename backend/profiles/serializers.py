@@ -215,7 +215,7 @@ class ArtistDirectorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ArtistProfile
-        fields = ('id', 'username', 'display_name', 'profile_photo', 'disciplines', 'location')
+        fields = ('id', 'user_id', 'username', 'display_name', 'profile_photo', 'disciplines', 'location')
 
     def get_display_name(self, obj):
         full_name = obj.user.get_full_name().strip()

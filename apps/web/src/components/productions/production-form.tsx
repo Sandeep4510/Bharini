@@ -38,7 +38,7 @@ export function ProductionForm({ onSaved }: { onSaved: (production: Production) 
       <aside className="hidden border-r border-slate-800 bg-gradient-to-br from-violet-600/25 via-slate-900 to-slate-950 p-8 lg:flex lg:flex-col lg:justify-between">
         <div>
           <p className="mb-4 inline-flex rounded-full border border-violet-400/40 bg-violet-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-violet-200">
-            Production profile
+            My Profile
           </p>
           <h2 className="max-w-sm text-4xl font-semibold leading-tight text-white">Build the home for your production brand.</h2>
         </div>

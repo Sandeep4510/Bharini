@@ -3,6 +3,7 @@ export type UserRole = 'artist' | 'production_house' | 'admin';
 export type AuthUser = {
   id: number;
   email: string;
+  username?: string | null;
   first_name: string;
   last_name: string;
   role: UserRole;
@@ -65,6 +66,7 @@ export type ArtistProfile = {
 
 export type ArtistDirectoryProfile = {
   id: number;
+  user_id: number;
   username: string | null;
   display_name: string;
   profile_photo: string | null;
@@ -98,6 +100,7 @@ export type UserSummary = {
   role: UserRole;
   username: string | null;
   profile_photo: string | null;
+  production_id: number | null;
 };
 
 export type ArtistPost = {
@@ -111,6 +114,7 @@ export type ArtistPost = {
   comment_count: number;
   liked: boolean;
   is_mine: boolean;
+  author_followed: boolean;
 };
 
 export type ArtistPostComment = {
@@ -121,6 +125,12 @@ export type ArtistPostComment = {
   can_delete: boolean;
 };
 
+export type ConnectionStatus = 'none' | 'pending_sent' | 'pending_received' | 'connected';
+
+export type ConnectionRequest = UserSummary & { requested_at: string };
+
+export type FollowerResult = UserSummary & { connection: ConnectionStatus };
+
 export type PublicProfile = UserSummary & {
   bio: string;
   location: string;
@@ -129,7 +139,46 @@ export type PublicProfile = UserSummary & {
   following_count: number;
   is_following: boolean;
   is_me: boolean;
+  connection: ConnectionStatus;
   posts: ArtistPost[];
+  portfolio: {
+    photos: Record<PhotoSlot, string | null> | null;
+    media_slots: DisciplineMedia[];
+    documents: ProfileDocument[];
+    showreel_links: string[];
+    languages: { language: string; level: string }[];
+  } | null;
+};
+
+export type SharedPostPreview = {
+  kind: 'artist' | 'production';
+  id: number;
+  author_name: string;
+  author_photo: string | null;
+  body: string;
+  image: string | null;
+  url: string;
+};
+
+export type ChatMessage = {
+  id: number;
+  is_mine: boolean;
+  body: string;
+  shared: SharedPostPreview | null;
+  created_at: string;
+  read: boolean;
+};
+
+/** A post that can travel inside a chat message. */
+export type SharedPostRef = { kind: 'artist' | 'production'; id: number };
+
+export type Conversation = {
+  id: number;
+  other: UserSummary;
+  last_message: ChatMessage | null;
+  unread_count: number;
+  updated_at: string;
+  can_message: boolean;
 };
 
 export type TokenPair = {
@@ -167,6 +216,11 @@ export type Production = ProductionSummary & {
   title_credits: TitleCredit[];
   is_owner: boolean;
   created_at: string;
+  owner_id: number;
+  follower_count: number;
+  following_count: number;
+  is_following: boolean;
+  connection: ConnectionStatus;
 };
 
 export type CastingCallDetails = {
@@ -191,6 +245,7 @@ export type Post = {
   casting: CastingCallDetails | null;
   production: ProductionSummary;
   created_at: string;
+  near_you?: boolean;
 };
 
 export type PostComment = {

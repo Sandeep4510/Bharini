@@ -59,9 +59,9 @@ export function UploadCard({
   };
 
   return (
-    <div className={`flex flex-col rounded-2xl border p-3 ${filled ? 'border-violet-500/40 bg-slate-900/70' : 'border-dashed border-slate-700 bg-slate-950/40'}`}>
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <p className="font-medium text-white">{title}</p>
+    <div className={`flex min-w-0 flex-col rounded-2xl border p-3 ${filled ? 'border-violet-500/40 bg-slate-900/70' : 'border-dashed border-slate-700 bg-slate-950/40'}`}>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2">
+        <p className="min-w-0 truncate font-medium text-white">{title}</p>
         <p className="text-xs text-slate-400">{subtitle}</p>
       </div>
 
@@ -72,7 +72,7 @@ export function UploadCard({
           type="button"
           disabled={Boolean(busy)}
           onClick={() => inputRef.current?.click()}
-          className="flex-1 rounded-lg bg-violet-500/90 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
+          className="min-w-0 flex-1 truncate rounded-lg bg-violet-500/90 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
         >
           {busy === 'uploading' ? 'Uploading…' : filled ? 'Replace' : 'Upload'}
         </button>
@@ -81,9 +81,11 @@ export function UploadCard({
             type="button"
             disabled={Boolean(busy)}
             onClick={() => void run('removing', onRemove)}
-            className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-400 hover:text-red-200 disabled:opacity-50"
+            aria-label={`Remove ${title}`}
+            title="Remove"
+            className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-2 text-sm leading-none transition hover:border-red-400 hover:bg-red-500/10 disabled:opacity-50"
           >
-            {busy === 'removing' ? 'Removing…' : 'Remove'}
+            {busy === 'removing' ? '…' : '🗑️'}
           </button>
         ) : null}
       </div>

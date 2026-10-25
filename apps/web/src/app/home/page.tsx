@@ -10,6 +10,7 @@ import { readSession } from '@bharini/auth';
 import type { ArtistDirectoryProfile, ArtistPost, Production } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
+import { PostCard, replacePost } from '@/components/artist-post-card';
 import { ArtistCard } from '@/components/artist-card';
 import { useAuth } from '@/components/auth-provider';
 import { ArtistHome } from '@/components/artist-home';
@@ -83,23 +84,6 @@ function Composer({ onPosted }: { onPosted: (post: ArtistPost) => void }) {
   );
 }
 
-function PostCard({ post }: { post: ArtistPost }) {
-  return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-      <p className="text-xs text-slate-400">
-        {post.author.name} · {new Date(post.created_at).toLocaleString()}
-      </p>
-      <p className="mt-2 whitespace-pre-line text-slate-100">{post.body}</p>
-      {post.media && post.media_kind === 'image' ? (
-        <img src={post.media} alt="" className="mt-3 max-h-96 rounded-xl object-contain" />
-      ) : null}
-      {post.media && post.media_kind === 'video' ? (
-        <video src={post.media} controls className="mt-3 max-h-96 w-full rounded-xl" />
-      ) : null}
-    </article>
-  );
-}
-
 function ProductionHome() {
   const router = useRouter();
   const { user } = useAuth();
@@ -145,12 +129,12 @@ function ProductionHome() {
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-3xl space-y-6">
-        <AppHeader />
+        <AppHeader greet />
 
         {isProductionHouse ? null : (
           <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="text-2xl font-semibold">Production Profile</h1>
+              <h1 className="text-2xl font-semibold">My Profile</h1>
               <Link href="/productions/me" className={secondaryButton}>
                 Open profile
               </Link>
@@ -213,9 +197,14 @@ function ProductionHome() {
           <Composer onPosted={(post) => setPosts((previous) => [post, ...previous])} />
           {posts.length ? (
             <div className="space-y-3">
-              <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Your posts</p>
+              <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Feed · people you follow first</p>
               {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onChanged={(changed) => setPosts((previous) => replacePost(previous, changed))}
+                  onDeleted={(id) => setPosts((previous) => previous.filter((item) => item.id !== id))}
+                />
               ))}
             </div>
           ) : null}

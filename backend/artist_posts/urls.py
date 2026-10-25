@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     FollowAPIView,
+    FollowerSearchAPIView,
     PostCommentAPIView,
     PostCommentsAPIView,
     PostDetailAPIView,
@@ -20,6 +21,7 @@ urlpatterns = [
 
 # mounted at /api/v1/users/
 user_urlpatterns = [
+    path('me/followers/', FollowerSearchAPIView.as_view(), name='user-follower-search'),
     path('<int:user_id>/', UserProfileAPIView.as_view(), name='user-profile'),
     path('<int:user_id>/follow/', FollowAPIView.as_view(), name='user-follow'),
 ]

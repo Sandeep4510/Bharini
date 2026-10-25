@@ -16,12 +16,16 @@ IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
 def user_summary(request, user):
     """What anyone signed in may see about an account: no email, phone or birth date."""
     profile = getattr(user, 'artist_profile', None)
+    production = getattr(user, 'production_profile', None)
+    photo = profile.profile_photo if profile else production.profile_picture if production else None
     return {
         'id': user.id,
-        'name': user.get_full_name() or 'Bharini member',
+        'name': production.name if production else user.get_full_name() or 'Bharini member',
         'role': user.role,
         'username': profile.username if profile else None,
-        'profile_photo': absolute_url(request, profile.profile_photo) if profile else None,
+        'profile_photo': absolute_url(request, photo),
+        # production houses link to their /productions/<id> page instead of /u/<id>
+        'production_id': production.id if production else None,
     }
 
 
@@ -31,10 +35,11 @@ class PostSerializer(serializers.ModelSerializer):
     comment_count = serializers.SerializerMethodField()
     liked = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField()
+    author_followed = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
-        fields = ('id', 'author', 'body', 'media', 'media_kind', 'created_at', 'like_count', 'comment_count', 'liked', 'is_mine')
+        fields = ('id', 'author', 'body', 'media', 'media_kind', 'created_at', 'like_count', 'comment_count', 'liked', 'is_mine', 'author_followed')
         read_only_fields = ('id', 'media_kind', 'created_at')
 
     def get_author(self, obj):
@@ -49,6 +54,11 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_liked(self, obj):
         return obj.liked if hasattr(obj, 'liked') else obj.likes.filter(user=self.context['request'].user).exists()
+
+    def get_author_followed(self, obj):
+        if hasattr(obj, 'author_followed'):
+            return obj.author_followed
+        return obj.author.followers.filter(follower=self.context['request'].user).exists()
 
     def get_is_mine(self, obj):
         return obj.author_id == self.context['request'].user.id

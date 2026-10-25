@@ -1,4 +1,4 @@
-from django.db.models import Count, Exists, F, OuterRef
+from django.db.models import Case, Count, Exists, F, OuterRef, Value, When
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.pagination import CursorPagination
@@ -97,3 +97,29 @@ class PostCommentListCreateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(post=post, author=request.user)
         return ok_response(request, 'Comment added.', data=serializer.data, status_code=status.HTTP_201_CREATED)
+
+
+OPPORTUNITY_LIMIT = 20
+
+
+def artist_city(user):
+    """'Mangaluru, Karnataka' -> 'mangaluru'; empty when the viewer has no location."""
+    profile = getattr(user, 'artist_profile', None)
+    return (profile.location.split(',')[0].strip() if profile and profile.location else '').lower()
+
+
+class OpportunitiesAPIView(APIView):
+    """Casting calls for the home feed: ones in the viewer's city first, then the newest elsewhere."""
+
+    def get(self, request):
+        city = artist_city(request.user)
+        near = When(casting__location__icontains=city, then=Value(True)) if city else None
+        posts = annotated_posts(request.user).filter(post_type=Post.Type.CASTING_CALL).annotate(
+            near_you=Case(near, default=Value(False)) if near else Value(False),
+        ).order_by('-near_you', '-created_at')[:OPPORTUNITY_LIMIT]
+        # shortcut: city text match only; switch to a city/state field or geo distance when locations get structured
+        data = [
+            {**item, 'near_you': post.near_you}
+            for post, item in zip(posts, PostSerializer(posts, many=True, context={'request': request}).data)
+        ]
+        return ok_response(request, 'Opportunities.', data={'posts': data})

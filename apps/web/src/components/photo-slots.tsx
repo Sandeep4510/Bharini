@@ -4,6 +4,7 @@
 import { apiClient } from '@bharini/api-client';
 import type { ArtistProfile, PhotoSlot } from '@bharini/types';
 
+import { PoseGuide } from '@/components/pose-guides';
 import { UploadCard } from '@/components/upload-card';
 
 const PHOTO_MAX_MB = 8;
@@ -36,9 +37,9 @@ export function PhotoSlots({ profile, onProfile }: { profile: ArtistProfile; onP
             preview={<img src={url ?? ''} alt={`${title} photo`} className="aspect-[3/4] w-full rounded-xl object-cover" />}
             placeholder={
               <div className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl bg-slate-900/60 p-3 text-center">
-                <span className="text-4xl opacity-40" aria-hidden>
-                  {slot === 'full_length' ? '🧍' : '👤'}
-                </span>
+                <div className="min-h-0 w-full flex-1">
+                  <PoseGuide slot={slot} />
+                </div>
                 <span className="text-xs text-slate-400">{guide}</span>
               </div>
             }

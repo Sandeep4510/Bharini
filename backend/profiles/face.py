@@ -49,5 +49,6 @@ def check_face(image, kind):
     if not faces:
         raise ValidationError(NO_FACE)
     areas = sorted((w * h for _, _, w, h in faces), reverse=True)
-    if len(areas) > 1 and areas[1] >= areas[0] / 2:
+    # the profile photo may be a group or event shot (and Haar cascades misfire on patterns), so only casting shots must be solo
+    if kind != 'profile' and len(areas) > 1 and areas[1] >= areas[0] / 2:
         raise ValidationError(MANY_FACES)

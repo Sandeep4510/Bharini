@@ -16,6 +16,8 @@ import {
   primaryButton,
   secondaryButton,
 } from '@/components/profile-fields';
+import { ShareButton } from '@/components/share-menu';
+import { profileHref } from '@/lib/routes';
 
 export const BODY_LIMIT = 5000;
 const COMMENT_LIMIT = 1000;
@@ -37,19 +39,56 @@ export function Avatar({ user, size = 'h-10 w-10' }: { user: UserSummary; size?:
   );
 }
 
-function AuthorLine({ user, createdAt }: { user: UserSummary; createdAt: string }) {
+/** Apply a changed post to a list; a follow change applies to every post by that author. */
+export function replacePost(posts: ArtistPost[], changed: ArtistPost) {
+  return posts.map((item) =>
+    item.id === changed.id ? changed : item.author.id === changed.author.id ? { ...item, author_followed: changed.author_followed } : item,
+  );
+}
+
+function AuthorLine({ post, onChanged }: { post: ArtistPost; onChanged: (post: ArtistPost) => void }) {
+  const user = post.author;
+  const [busy, setBusy] = useState(false);
+
+  const toggleFollow = async () => {
+    setBusy(true);
+    try {
+      const response = await apiClient.setFollow(user.id, !post.author_followed);
+      if (response.data) onChanged({ ...post, author_followed: response.data.is_following });
+    } catch {
+      // the button keeps its old state; a retry is one click away
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <Link href={`/u/${user.id}`} aria-label={`${user.name}'s profile`}>
+      <Link href={profileHref(user)} aria-label={`${user.name}'s profile`}>
         <Avatar user={user} />
       </Link>
       <div className="min-w-0">
-        <Link href={`/u/${user.id}`} className="block truncate font-semibold text-white hover:underline">
-          {user.name}
-        </Link>
+        <div className="flex min-w-0 items-center gap-2">
+          <Link href={profileHref(user)} className="truncate font-semibold text-white hover:underline">
+            {user.name}
+          </Link>
+          {post.is_mine ? null : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void toggleFollow()}
+              aria-pressed={post.author_followed}
+              className={`shrink-0 text-xs font-semibold transition disabled:opacity-50 ${
+                post.author_followed ? 'text-slate-400 hover:text-slate-200' : 'text-violet-300 hover:text-violet-200'
+              }`}
+            >
+              · {post.author_followed ? 'Following' : '+ Follow'}
+            </button>
+          )}
+        </div>
         <p className="truncate text-xs text-slate-400">
           {user.username ? `@${user.username} · ` : ''}
-          {new Date(createdAt).toLocaleString()}
+          {new Date(post.created_at).toLocaleString()}
         </p>
       </div>
     </div>
@@ -115,13 +154,13 @@ function Comments({ post, onCount }: { post: ArtistPost; onCount: (count: number
       {comments === null && !error ? <p className="text-sm text-slate-400">Loading comments…</p> : null}
       {comments?.map((comment) => (
         <div key={comment.id} className="flex items-start gap-3">
-          <Link href={`/u/${comment.author.id}`} aria-label={`${comment.author.name}'s profile`}>
+          <Link href={profileHref(comment.author)} aria-label={`${comment.author.name}'s profile`}>
             <Avatar user={comment.author} size="h-8 w-8" />
           </Link>
           <div className="min-w-0 flex-1 rounded-xl bg-slate-800/60 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <Link
-                href={`/u/${comment.author.id}`}
+                href={profileHref(comment.author)}
                 className="truncate text-sm font-semibold text-white hover:underline"
               >
                 {comment.author.name}
@@ -175,7 +214,6 @@ export function PostCard({
   const [removeMedia, setRemoveMedia] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [shareNote, setShareNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -225,25 +263,10 @@ export function PostCard({
     }
   };
 
-  const share = async () => {
-    const url = `${window.location.origin}/posts/${post.id}`;
-    if (navigator.share) {
-      // the user closing the share sheet rejects; nothing to report
-      await navigator.share({ title: `Post by ${post.author.name}`, url }).catch(() => undefined);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareNote('Link copied');
-    } catch {
-      setShareNote(url);
-    }
-  };
-
   return (
     <article id={`post-${post.id}`} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
       <div className="flex items-start justify-between gap-3">
-        <AuthorLine user={post.author} createdAt={post.created_at} />
+        <AuthorLine post={post} onChanged={onChanged} />
         {post.is_mine && !editing ? (
           <div className="flex shrink-0 gap-2">
             {confirmDelete ? (
@@ -366,14 +389,7 @@ export function PostCard({
         >
           💬 {post.comment_count} {post.comment_count === 1 ? 'Comment' : 'Comments'}
         </button>
-        <button type="button" onClick={() => void share()} className={actionButton}>
-          ↗ Share
-        </button>
-        {shareNote ? (
-          <span className="text-xs text-slate-400" role="status">
-            {shareNote}
-          </span>
-        ) : null}
+        <ShareButton post={{ kind: 'artist', id: post.id }} path={`/posts/${post.id}`} title={`Post by ${post.author.name}`} className={actionButton} />
       </div>
 
       {showComments ? <Comments post={post} onCount={(count) => onChanged({ ...post, comment_count: count })} /> : null}

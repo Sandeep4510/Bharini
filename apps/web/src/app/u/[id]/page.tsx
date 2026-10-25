@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -8,8 +9,11 @@ import { readSession } from '@bharini/auth';
 import type { PublicProfile } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
-import { Avatar, PostCard } from '@/components/artist-post-card';
+import { ConnectButton } from '@/components/connect-button';
+import { AboutWithStats } from '@/components/follow-stats';
+import { Avatar, PostCard, replacePost } from '@/components/artist-post-card';
 import { ErrorBanner, errorMessage, primaryButton, secondaryButton } from '@/components/profile-fields';
+import { PublicPortfolio } from '@/components/public-portfolio';
 
 const ROLE_LABELS = { artist: 'Artist / Technician', production_house: 'Production house', admin: 'Bharini team' };
 
@@ -29,7 +33,10 @@ function UserProfilePageContent() {
     apiClient
       .getUserProfile(Number(id))
       .then((response) => {
-        if (!cancelled && response.data) setProfile(response.data);
+        if (cancelled || !response.data) return;
+        // production houses have their own profile page
+        if (response.data.production_id) router.replace(`/productions/${response.data.production_id}`);
+        else setProfile(response.data);
       })
       .catch((caughtError) => {
         if (cancelled) return;
@@ -76,14 +83,15 @@ function UserProfilePageContent() {
                       .join(' · ')}
                   </p>
                 ) : null}
-                <p className="mt-2 text-sm text-slate-300">
-                  <strong className="text-white">{profile.follower_count}</strong>{' '}
-                  {profile.follower_count === 1 ? 'follower' : 'followers'} ·{' '}
-                  <strong className="text-white">{profile.following_count}</strong> following
-                </p>
-                {profile.bio ? <p className="mt-3 whitespace-pre-line text-slate-200">{profile.bio}</p> : null}
               </div>
               {profile.is_me ? null : (
+                <div className="flex flex-wrap gap-2 self-start">
+                <ConnectButton userId={profile.id} status={profile.connection} onChange={(connection) => setProfile({ ...profile, connection })} />
+                {profile.connection === 'connected' ? (
+                  <Link href={`/messages?with=${profile.id}`} className={secondaryButton}>
+                    Message
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}
@@ -92,8 +100,17 @@ function UserProfilePageContent() {
                 >
                   {profile.is_following ? 'Following' : 'Follow'}
                 </button>
+                </div>
               )}
             </section>
+
+            <AboutWithStats
+              bio={profile.bio}
+              counts={{ followers: profile.follower_count, following: profile.following_count }}
+              emptyText="No About me yet."
+            />
+
+            {profile.portfolio ? <PublicPortfolio portfolio={profile.portfolio} /> : null}
 
             <section className="space-y-3">
               <h2 className="text-xl font-semibold">Posts</h2>
@@ -105,7 +122,7 @@ function UserProfilePageContent() {
                     onChanged={(changed) =>
                       setProfile({
                         ...profile,
-                        posts: profile.posts.map((item) => (item.id === changed.id ? changed : item)),
+                        posts: replacePost(profile.posts, changed),
                       })
                     }
                     onDeleted={(postId) =>

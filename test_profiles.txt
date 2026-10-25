@@ -1,0 +1,18 @@
+Bharini test accounts (local development only)
+Password for every account: Qwerty20@
+Emails are marked verified without sending mail, so login works straight away.
+Artists have only disciplines + username set; log in to finish onboarding.
+
+Email                                    Role                   Type                             Username
+--------------------------------------------------------------------------------------------------------------
+test_actor@bharini.com                   Artist / Technician    actor                            @test_actor
+test_singer@bharini.com                  Artist / Technician    singer                           @test_singer
+test_musician@bharini.com                Artist / Technician    musician                         @test_musician
+test_choreographer@bharini.com           Artist / Technician    choreographer                    @test_choreographer
+test_director@bharini.com                Artist / Technician    director                         @test_director
+test_cameraman@bharini.com               Artist / Technician    cinematographer                  @test_cameraman
+test_actor_singer@bharini.com            Artist / Technician    actor, singer                    @test_actor_singer
+test_singer_musician@bharini.com         Artist / Technician    singer, musician                 @test_singer_musician
+test_actor_choreographer@bharini.com     Artist / Technician    actor, choreographer             @test_actor_choreographer
+test_production_house@bharini.com        Production house       house · "Test Productions"       -
+test_producer@bharini.com                Production house       individual · "Test Producer"     -

@@ -484,12 +484,14 @@ export default function OnboardingPage() {
                   type="button"
                   disabled={!reachable}
                   onClick={() => goTo(index)}
-                  className="w-full text-left disabled:cursor-not-allowed"
+                  aria-current={index === step ? 'step' : undefined}
+                  className={`w-full rounded-xl border p-2 text-left transition disabled:cursor-not-allowed ${
+                    index === step ? 'border-slate-300/70 bg-violet-500/10' : 'border-transparent hover:border-slate-700'
+                  }`}
                 >
                   <span className={`block h-1.5 rounded-full ${index <= step ? 'bg-violet-500' : 'bg-slate-800'}`} />
-                  <span className={`mt-2 block text-xs ${index === step ? 'text-white' : 'text-slate-400'}`}>
+                  <span className={`mt-2 block text-xs ${index === step ? 'font-semibold text-white' : 'text-slate-400'}`}>
                     {index + 1}. {label}
-                    {index === 3 ? ' (optional)' : ''}
                   </span>
                 </button>
               </li>
