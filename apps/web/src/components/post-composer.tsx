@@ -18,7 +18,6 @@ const initialCasting = {
   age_min: '18',
   age_max: '30',
   gender: 'any',
-  complexion: 'any',
   languages: '',
   location: '',
   approx_pay: '',
@@ -49,7 +48,6 @@ export function PostComposer({ onPosted }: { onPosted: () => void }) {
             age_min: Number(casting.age_min),
             age_max: Number(casting.age_max),
             gender: casting.gender as 'any' | 'male' | 'female' | 'other',
-            complexion: casting.complexion as 'any' | 'fair' | 'wheatish' | 'medium' | 'dusky' | 'dark',
           },
         },
         image,
@@ -133,20 +131,6 @@ export function PostComposer({ onPosted }: { onPosted: () => void }) {
             <option value="male">Male</option>
             <option value="female">Female</option>
             <option value="other">Other</option>
-          </select>
-        </Field>
-        <Field label="Complexion">
-          <select
-            value={casting.complexion}
-            onChange={(e) => updateCasting('complexion', e.target.value)}
-            className={`${inputClass} ${okBorder}`}
-          >
-            <option value="any">Any</option>
-            <option value="fair">Fair</option>
-            <option value="wheatish">Wheatish</option>
-            <option value="medium">Medium</option>
-            <option value="dusky">Dusky</option>
-            <option value="dark">Dark</option>
           </select>
         </Field>
         <Field label="Languages">

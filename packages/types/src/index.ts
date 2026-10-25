@@ -173,7 +173,6 @@ export type CastingCallDetails = {
   age_min: number;
   age_max: number;
   gender: 'any' | 'male' | 'female' | 'other';
-  complexion: 'any' | 'fair' | 'wheatish' | 'medium' | 'dusky' | 'dark';
   languages: string;
   location: string;
   approx_pay: string;

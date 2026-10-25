@@ -20,7 +20,7 @@ class PostAPITests(APITestCase):
 
     def casting_payload(self, body='Casting for a new serial #Casting #Tamil', **overrides):
         casting = {
-            'age_min': 20, 'age_max': 30, 'gender': 'female', 'complexion': 'fair',
+            'age_min': 20, 'age_max': 30, 'gender': 'female',
             'languages': 'Hindi, Tamil', 'location': 'Chennai', 'approx_pay': '50k per day',
         }
         casting.update(overrides)

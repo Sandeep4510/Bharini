@@ -13,7 +13,7 @@ from .models import CastingCall, Post, PostComment
 class CastingCallSerializer(serializers.ModelSerializer):
     class Meta:
         model = CastingCall
-        fields = ['age_min', 'age_max', 'gender', 'complexion', 'languages', 'location', 'approx_pay']
+        fields = ['age_min', 'age_max', 'gender', 'languages', 'location', 'approx_pay']
 
     def validate(self, attrs):
         if attrs['age_min'] > attrs['age_max']:

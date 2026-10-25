@@ -44,19 +44,10 @@ class CastingCall(models.Model):
         FEMALE = 'female', 'Female'
         OTHER = 'other', 'Other'
 
-    class Complexion(models.TextChoices):
-        ANY = 'any', 'Any'
-        FAIR = 'fair', 'Fair'
-        WHEATISH = 'wheatish', 'Wheatish'
-        MEDIUM = 'medium', 'Medium'
-        DUSKY = 'dusky', 'Dusky'
-        DARK = 'dark', 'Dark'
-
     post = models.OneToOneField(Post, on_delete=models.CASCADE, related_name='casting')
     age_min = models.PositiveSmallIntegerField()
     age_max = models.PositiveSmallIntegerField()
     gender = models.CharField(max_length=10, choices=Gender.choices, default=Gender.ANY)
-    complexion = models.CharField(max_length=10, choices=Complexion.choices, default=Complexion.ANY)
     languages = models.CharField(max_length=200)
     location = models.CharField(max_length=200)
     approx_pay = models.CharField(max_length=200)

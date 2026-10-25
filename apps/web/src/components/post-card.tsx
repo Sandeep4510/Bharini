@@ -12,7 +12,6 @@ function CastingDetails({ casting }: { casting: CastingCallDetails }) {
   const rows: [string, string][] = [
     ['Age', `${casting.age_min} – ${casting.age_max}`],
     ['Gender', label(casting.gender)],
-    ['Complexion', label(casting.complexion)],
     ['Languages', casting.languages],
     ['Location', casting.location],
     ['Approx pay', casting.approx_pay],
