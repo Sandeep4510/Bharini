@@ -105,6 +105,7 @@ function UserProfilePageContent() {
             </section>
 
             <AboutWithStats
+              userId={profile.id}
               bio={profile.bio}
               counts={{ followers: profile.follower_count, following: profile.following_count }}
               emptyText="No About me yet."

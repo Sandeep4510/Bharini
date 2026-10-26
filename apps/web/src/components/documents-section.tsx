@@ -83,7 +83,7 @@ export function DocumentsSection({ profile, onProfile }: { profile: ArtistProfil
           </select>
           <input aria-label="Title" value={title} maxLength={120} placeholder="e.g. Bharatanatyam diploma, Best Actor 2024" onChange={(event) => setTitle(event.target.value)} className={`${inputClass} ${okBorder}`} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <input
             key={inputKey}
             type="file"
@@ -92,7 +92,7 @@ export function DocumentsSection({ profile, onProfile }: { profile: ArtistProfil
             className="text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-100"
           />
           <button type="submit" disabled={busy} className={secondaryButton}>
-            {busy ? 'Uploading…' : '+ Add document'}
+            {busy ? 'Uploading…' : 'Upload'}
           </button>
         </div>
       </form>

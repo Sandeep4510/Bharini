@@ -9,6 +9,7 @@ import type { ArtistPost, Post } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
 import { useAuth } from '@/components/auth-provider';
+import { PeopleSearch } from '@/components/people-dialogs';
 import { BODY_LIMIT, PostCard, replacePost } from '@/components/artist-post-card';
 import { PostCard as CastingCallCard } from '@/components/post-card';
 import {
@@ -119,6 +120,7 @@ export function ArtistHome() {
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <AppHeader greet />
+        <PeopleSearch />
 
         <section className="space-y-3">
           <h1 className="text-2xl font-semibold">Share something</h1>

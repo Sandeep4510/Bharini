@@ -162,3 +162,24 @@ class FollowerSearchTests(TestCase):
         self.assertEqual(names('asha'), ['Asha Rao'])
         self.assertEqual(names('rao ravi'), ['Ravi Rao'])
         self.assertEqual(names('nobody'), [])
+
+
+class PeopleSearchAndFollowListTests(TestCase):
+    def test_search_people_and_list_followers(self):
+        me = User.objects.create_user(email='me@example.com', first_name='Meera', last_name='S', password='StrongPass123!')
+        ravi = User.objects.create_user(email='r@example.com', first_name='Ravi', last_name='Kumar', password='StrongPass123!')
+        User.objects.create_user(email='g@example.com', first_name='Ravi', last_name='Gone', password='StrongPass123!', is_active=False)
+        Follow.objects.create(follower=ravi, followee=me)
+        client = APIClient()
+        client.force_authenticate(me)
+
+        names = lambda q: [p['name'] for p in client.get('/api/v1/users/search/', {'q': q}).data['data']['results']]
+        self.assertEqual(names('ravi'), ['Ravi Kumar'])  # inactive accounts hidden
+        self.assertEqual(names('meera'), [])  # not yourself
+        self.assertEqual(names(''), [])
+
+        followers = client.get(f'/api/v1/users/{me.id}/followers/').data['data']['people']
+        self.assertEqual([p['name'] for p in followers], ['Ravi Kumar'])
+        self.assertNotIn('email', followers[0])
+        following = client.get(f'/api/v1/users/{ravi.id}/following/').data['data']['people']
+        self.assertEqual([p['name'] for p in following], ['Meera S'])

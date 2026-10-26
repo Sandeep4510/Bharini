@@ -483,6 +483,14 @@ export class ApiClient {
     });
   }
 
+  searchPeople(query: string) {
+    return this.request<AuthApiResponse<{ results: UserSummary[] }>>(`/api/v1/users/search/?q=${encodeURIComponent(query)}`);
+  }
+
+  getFollowList(userId: number, which: 'followers' | 'following') {
+    return this.request<AuthApiResponse<{ people: UserSummary[] }>>(`/api/v1/users/${userId}/${which}/`);
+  }
+
   getMyConnections(query = '') {
     return this.request<AuthApiResponse<{ connections: UserSummary[] }>>(
       `/api/v1/users/me/connections/?q=${encodeURIComponent(query)}`,

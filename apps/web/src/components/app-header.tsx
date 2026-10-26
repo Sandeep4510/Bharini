@@ -9,7 +9,7 @@ import { apiClient } from '@bharini/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { secondaryButton } from '@/components/profile-fields';
 
-/** Header for signed-in pages: the logo always leads back to /home. `greet` swaps the wordmark for "Hi <name>". */
+/** Header for signed-in pages: the logo leads back to /home and shows the user's first name ("Hi <name>" with `greet`). */
 export function AppHeader({ greet = false }: { greet?: boolean }) {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -44,7 +44,7 @@ export function AppHeader({ greet = false }: { greet?: boolean }) {
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">
           B
         </span>
-        <span>{greet && user ? `Hi ${user.username || user.first_name || 'there'}` : 'Bharini'}</span>
+        <span>{user?.first_name ? `${greet ? 'Hi ' : ''}${user.first_name}` : 'Bharini'}</span>
       </Link>
       <nav className="flex items-center gap-4 text-sm">
         <Link href="/home" className="text-slate-300 hover:text-white">

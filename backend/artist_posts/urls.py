@@ -3,12 +3,14 @@ from django.urls import path
 from .views import (
     FollowAPIView,
     FollowerSearchAPIView,
+    FollowListAPIView,
     PostCommentAPIView,
     PostCommentsAPIView,
     PostDetailAPIView,
     PostLikeAPIView,
     PostListCreateAPIView,
     UserProfileAPIView,
+    UserSearchAPIView,
 )
 
 urlpatterns = [
@@ -24,4 +26,7 @@ user_urlpatterns = [
     path('me/followers/', FollowerSearchAPIView.as_view(), name='user-follower-search'),
     path('<int:user_id>/', UserProfileAPIView.as_view(), name='user-profile'),
     path('<int:user_id>/follow/', FollowAPIView.as_view(), name='user-follow'),
+    path('search/', UserSearchAPIView.as_view(), name='user-search'),
+    path('<int:user_id>/followers/', FollowListAPIView.as_view(which='followers'), name='user-followers'),
+    path('<int:user_id>/following/', FollowListAPIView.as_view(which='following'), name='user-following'),
 ]

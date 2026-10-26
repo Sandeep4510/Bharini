@@ -129,7 +129,7 @@ export function ProductionProfileView({ productionId }: { productionId: number }
             {made.length || partOf.length ? null : <p className="text-sm text-slate-400">No titles added yet.</p>}
           </div>
         </section>
-        <FollowStats followers={production.follower_count} following={production.following_count} />
+        <FollowStats userId={production.owner_id} followers={production.follower_count} following={production.following_count} />
       </div>
 
       {production.is_owner && <PostComposer onPosted={() => setRefreshKey((key) => key + 1)} />}

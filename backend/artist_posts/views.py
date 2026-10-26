@@ -200,18 +200,25 @@ def public_portfolio(request, profile):
     }
 
 
+def matching_name(users, query):
+    """Narrow `users` to those whose name, username or production name matches every word of `query`."""
+    for word in query.split()[:5]:
+        users = users.filter(
+            Q(first_name__icontains=word)
+            | Q(last_name__icontains=word)
+            | Q(artist_profile__username__icontains=word)
+            | Q(production_profile__name__icontains=word)
+        )
+    return users
+
+
 class FollowerSearchAPIView(APIView):
     """People who follow you, filtered by name or username; every word of `q` must match."""
 
     def get(self, request, *args, **kwargs):
-        followers = User.objects.filter(following__followee=request.user, is_active=True)
-        for word in request.query_params.get('q', '').split()[:5]:
-            followers = followers.filter(
-                Q(first_name__icontains=word)
-                | Q(last_name__icontains=word)
-                | Q(artist_profile__username__icontains=word)
-                | Q(production_profile__name__icontains=word)
-            )
+        followers = matching_name(
+            User.objects.filter(following__followee=request.user, is_active=True), request.query_params.get('q', ''),
+        )
         followers = followers.select_related('artist_profile', 'production_profile').order_by('first_name', 'last_name', 'id')
         # shortcut: first FOLLOWER_RESULTS matches only; page them if accounts get thousands of followers
         data = [
@@ -243,3 +250,39 @@ class FollowAPIView(APIView):
             return not_found(request, 'Profile')
         Follow.objects.filter(follower=request.user, followee=user).delete()
         return self.respond(request, user)
+
+
+SEARCH_RESULTS = 20
+FOLLOW_LIST_LIMIT = 200
+
+
+class UserSearchAPIView(APIView):
+    """Find any artist or production house by name or username (home page search bar)."""
+
+    def get(self, request, *args, **kwargs):
+        query = request.query_params.get('q', '').strip()
+        if not query:
+            return ok_response(request, message='People.', data={'results': []})
+        people = matching_name(User.objects.filter(is_active=True).exclude(pk=request.user.pk), query)
+        people = people.select_related('artist_profile', 'production_profile').order_by('first_name', 'last_name', 'id')
+        return ok_response(request, message='People.', data={
+            'results': [user_summary(request, person) for person in people.distinct()[:SEARCH_RESULTS]],
+        })
+
+
+class FollowListAPIView(APIView):
+    """Who follows `user_id` (followers) or whom they follow (following)."""
+
+    which = 'followers'
+
+    def get(self, request, user_id, *args, **kwargs):
+        user = User.objects.filter(pk=user_id, is_active=True).first()
+        if not user:
+            return not_found(request, 'Profile')
+        if self.which == 'followers':
+            people = User.objects.filter(following__followee=user, is_active=True)
+        else:
+            people = User.objects.filter(followers__follower=user, is_active=True)
+        # shortcut: first FOLLOW_LIST_LIMIT, newest follows first; page it once accounts get big audiences
+        people = people.select_related('artist_profile', 'production_profile').order_by('-id')[:FOLLOW_LIST_LIMIT]
+        return ok_response(request, message=self.which.title(), data={'people': [user_summary(request, p) for p in people]})
