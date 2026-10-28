@@ -148,12 +148,12 @@ class MessagesAPIView(APIView):
         messages = conversation.messages.select_related(*MESSAGE_RELATED)
         after = request.query_params.get('after', '')
         if after.isdigit():
-            # polling: only what arrived since the newest message the client has
+            # polling: only what arrived since the newest message the client has; reading happens on a full load
             page = list(messages.filter(id__gt=int(after))[:THREAD_SIZE])
         else:
             # shortcut: the latest THREAD_SIZE only, no scroll-back; add a `before` cursor when chats get long
             page = list(messages.order_by('-created_at', '-id')[:THREAD_SIZE])[::-1]
-        conversation.messages.filter(read_at__isnull=True).exclude(sender=request.user).update(read_at=timezone.now())
+            conversation.messages.filter(read_at__isnull=True).exclude(sender=request.user).update(read_at=timezone.now())
         return ok_response(request, message='Messages.', data={
             'conversation': conversation_data(request, conversation),
             'messages': [message_data(request, message) for message in page],

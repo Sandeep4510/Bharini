@@ -92,3 +92,80 @@ class MessagingApiTests(TestCase):
         self.assertEqual([m['body'] for m in asha.get(url).data['data']['messages']], ['Hi'])
         listed = asha.get('/api/v1/messages/conversations/').data['data']['conversations']
         self.assertFalse(next(item for item in listed if item['id'] == conversation['id'])['can_message'])
+
+
+
+class MessagingEdgeTests(TestCase):
+    def setUp(self):
+        self.asha = User.objects.create_user(email='asha@example.com', first_name='Asha', last_name='Rao', password='StrongPass123!')
+        self.ravi = User.objects.create_user(email='ravi@example.com', first_name='Ravi', last_name='K', password='StrongPass123!')
+        self.mia = User.objects.create_user(email='mia@example.com', first_name='Mia', last_name='Sen', password='StrongPass123!')
+        Connection.objects.create(from_user=self.asha, to_user=self.ravi, status=Connection.Status.ACCEPTED)
+        Connection.objects.create(from_user=self.asha, to_user=self.mia, status=Connection.Status.ACCEPTED)
+
+    def client_for(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def open_chat(self, client, other):
+        return client.post('/api/v1/messages/conversations/', {'user_id': other.id}, format='json').data['data']['id']
+
+    def thread_url(self, conversation_id):
+        return f'/api/v1/messages/conversations/{conversation_id}/messages/'
+
+    def test_each_listed_chat_shows_its_own_last_message_and_unread(self):
+        asha, mia = self.client_for(self.asha), self.client_for(self.mia)
+        ravi_url = self.thread_url(self.open_chat(asha, self.ravi))
+        mia_url = self.thread_url(self.open_chat(asha, self.mia))
+        asha.post(ravi_url, {'body': 'to ravi'}, format='json')
+        asha.post(mia_url, {'body': 'to mia 1'}, format='json')
+        asha.post(mia_url, {'body': 'to mia 2'}, format='json')
+        mia.post(mia_url, {'body': 'reply from mia'}, format='json')
+
+        listed = asha.get('/api/v1/messages/conversations/').data['data']['conversations']
+        by_name = {item['other']['name']: item for item in listed}
+        self.assertEqual(by_name['Ravi K']['last_message']['body'], 'to ravi')
+        self.assertEqual(by_name['Mia Sen']['last_message']['body'], 'reply from mia')
+        self.assertEqual(by_name['Mia Sen']['unread_count'], 1)
+        self.assertEqual(by_name['Ravi K']['unread_count'], 0)
+        self.assertEqual(listed[0]['other']['name'], 'Mia Sen')
+
+    def test_deactivated_user_hides_their_chats(self):
+        asha = self.client_for(self.asha)
+        conversation_id = self.open_chat(asha, self.ravi)
+        self.ravi.is_active = False
+        self.ravi.save(update_fields=['is_active'])
+        self.assertEqual(asha.get('/api/v1/messages/conversations/').data['data']['conversations'], [])
+        self.assertEqual(asha.get(self.thread_url(conversation_id)).status_code, 404)
+
+    def test_send_rules(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        url = self.thread_url(self.open_chat(asha, self.ravi))
+        too_long = asha.post(url, {'body': 'x' * 2001}, format='json')
+        self.assertEqual((too_long.status_code, too_long.data['field_errors']), (400, {'body': ['Keep messages under 2000 characters.']}))
+        self.assertEqual(asha.post(url, {'body': 'x' * 2000}, format='json').status_code, 201)
+        self.assertEqual(asha.post(url, {'shared_production_post_id': 999999}, format='json').status_code, 400)
+        self.assertEqual(ravi.post(url, {'body': ' '}, format='json').status_code, 400)
+
+    def test_unauthenticated_is_rejected(self):
+        client = APIClient()
+        self.assertEqual(client.get('/api/v1/messages/conversations/').status_code, 401)
+        self.assertEqual(client.get('/api/v1/messages/unread-count/').status_code, 401)
+
+    def test_sender_reading_own_thread_does_not_mark_read(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        url = self.thread_url(self.open_chat(asha, self.ravi))
+        asha.post(url, {'body': 'hi'}, format='json')
+        asha.get(url)
+        self.assertEqual(ravi.get('/api/v1/messages/unread-count/').data['data']['unread'], 1)
+
+    def test_polling_does_not_mark_unseen_messages_read(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        url = self.thread_url(self.open_chat(asha, self.ravi))
+        first = asha.post(url, {'body': 'one'}, format='json').data['data']['id']
+        asha.post(url, {'body': 'two'}, format='json')
+        self.assertEqual(ravi.get(f'{url}?after={first}').data['data']['messages'][0]['body'], 'two')
+        self.assertEqual(ravi.get('/api/v1/messages/unread-count/').data['data']['unread'], 2)
+        ravi.get(url)
+        self.assertEqual(ravi.get('/api/v1/messages/unread-count/').data['data']['unread'], 0)

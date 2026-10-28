@@ -48,3 +48,72 @@ class ConnectionApiTests(TestCase):
         self.assertEqual(self.status_seen_by(asha, self.ravi), 'none')
         self.assertEqual(asha.post(f'/api/v1/users/{self.asha.id}/connect/').status_code, 400)
         self.assertEqual(asha.post('/api/v1/users/999999/connect/').status_code, 404)
+
+
+class ConnectionEdgeTests(TestCase):
+    def setUp(self):
+        self.asha = User.objects.create_user(email='asha@example.com', first_name='Asha', last_name='Rao', password='StrongPass123!')
+        self.ravi = User.objects.create_user(email='ravi@example.com', first_name='Ravi', last_name='K', password='StrongPass123!')
+        self.mia = User.objects.create_user(email='mia@example.com', first_name='Mia', last_name='Rao', password='StrongPass123!')
+
+    def client_for(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_anonymous_is_rejected(self):
+        client = APIClient()
+        self.assertEqual(client.post(f'/api/v1/users/{self.ravi.id}/connect/').status_code, 401)
+        self.assertEqual(client.get('/api/v1/users/me/connections/').status_code, 401)
+        self.assertEqual(client.get('/api/v1/users/me/connection-requests/').status_code, 401)
+
+    def test_requests_list_newest_first_with_time(self):
+        asha, ravi, mia = self.client_for(self.asha), self.client_for(self.ravi), self.client_for(self.mia)
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        mia.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        requests = ravi.get('/api/v1/users/me/connection-requests/').data['data']['requests']
+        self.assertEqual([item['name'] for item in requests], ['Mia Rao', 'Asha Rao'])
+        self.assertIn('requested_at', requests[0])
+
+    def test_cancel_removes_request_from_receiver(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        self.assertEqual(asha.delete(f'/api/v1/users/{self.ravi.id}/connect/').data['data']['connection'], 'none')
+        self.assertEqual(ravi.get('/api/v1/users/me/connection-requests/').data['data']['requests'], [])
+        self.assertEqual(asha.delete(f'/api/v1/users/{self.ravi.id}/connect/').status_code, 200)  # removing nothing is fine
+
+    def test_connected_stays_connected_on_repeat_connect(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        ravi.post(f'/api/v1/users/{self.asha.id}/connect/')
+        self.assertEqual(asha.post(f'/api/v1/users/{self.ravi.id}/connect/').data['data']['connection'], 'connected')
+        self.assertEqual(ravi.post(f'/api/v1/users/{self.asha.id}/connect/').data['data']['connection'], 'connected')
+
+    def test_deactivated_users_are_hidden(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        self.ravi.is_active = False
+        self.ravi.save(update_fields=['is_active'])
+        self.assertEqual(asha.post(f'/api/v1/users/{self.ravi.id}/connect/').status_code, 404)
+        self.assertEqual(asha.get('/api/v1/users/me/connections/').data['data']['connections'], [])
+
+        self.mia.is_active = False
+        self.mia.save(update_fields=['is_active'])
+        self.assertEqual(asha.post(f'/api/v1/users/{self.mia.id}/connect/').status_code, 404)
+
+    def test_requests_from_deactivated_senders_are_hidden(self):
+        asha, ravi = self.client_for(self.asha), self.client_for(self.ravi)
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        self.asha.is_active = False
+        self.asha.save(update_fields=['is_active'])
+        self.assertEqual(ravi.get('/api/v1/users/me/connection-requests/').data['data']['requests'], [])
+
+    def test_connection_search_needs_every_word(self):
+        asha, ravi, mia = self.client_for(self.asha), self.client_for(self.ravi), self.client_for(self.mia)
+        for other in (self.ravi, self.mia):
+            asha.post(f'/api/v1/users/{other.id}/connect/')
+            self.client_for(other).post(f'/api/v1/users/{self.asha.id}/connect/')
+        names = lambda q: [p['name'] for p in asha.get('/api/v1/users/me/connections/', {'q': q}).data['data']['connections']]
+        self.assertEqual(names('mia rao'), ['Mia Rao'])
+        self.assertEqual(names('rao'), ['Mia Rao'])  # ravi K does not match "rao"
+        self.assertEqual(names('mia ravi'), [])

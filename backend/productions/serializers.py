@@ -74,9 +74,3 @@ class ProductionSerializer(serializers.ModelSerializer):
     def get_connection(self, obj):
         viewer = self.context['request'].user
         return 'none' if obj.owner_id == viewer.id else connection_status(viewer, obj.owner)
-
-    def create(self, validated_data):
-        user = self.context['request'].user
-        if ProductionProfile.objects.filter(owner=user).exists():
-            raise serializers.ValidationError('You already have a production profile.')
-        return ProductionProfile.objects.create(owner=user, **validated_data)

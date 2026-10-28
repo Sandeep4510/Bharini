@@ -9,6 +9,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import TokenError
 
 from .models import RefreshSession
+from .social import SIGNUP_ROLES
 
 User = get_user_model()
 
@@ -30,6 +31,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError('An account with this email already exists. Please sign in.')
+        return value
+
+    def validate_role(self, value):
+        if value not in SIGNUP_ROLES:
+            raise serializers.ValidationError('Choose Artist or Production House.')
         return value
 
     def validate(self, attrs):

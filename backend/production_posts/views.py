@@ -1,5 +1,4 @@
 from django.db.models import Case, Count, Exists, F, OuterRef, Value, When
-from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.pagination import CursorPagination
 from rest_framework.views import APIView
@@ -32,6 +31,14 @@ def annotated_posts(user):
     )
 
 
+def not_found(request, what='Post'):
+    return error_response(request, 'not_found', f'{what} not found.', status.HTTP_404_NOT_FOUND)
+
+
+def validation_error(request, message, errors):
+    return error_response(request, 'validation_error', message, status.HTTP_400_BAD_REQUEST, field_errors=errors)
+
+
 def paginated_post_list(request, queryset):
     paginator = PostCursorPagination()
     page = paginator.paginate_queryset(queryset, request, view=None)
@@ -50,32 +57,40 @@ class PostListCreateAPIView(APIView):
                 request, 'forbidden', 'Only production profile owners can publish posts.', status.HTTP_403_FORBIDDEN,
             )
         serializer = PostSerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return validation_error(request, 'Please fix the highlighted fields.', serializer.errors)
         serializer.save(production=profile)
         return ok_response(request, 'Post published.', data=serializer.data, status_code=status.HTTP_201_CREATED)
 
 
 class ProductionPostsAPIView(APIView):
     def get(self, request, pk):
-        get_object_or_404(ProductionProfile, pk=pk)
+        if not ProductionProfile.objects.filter(pk=pk).exists():
+            return not_found(request, 'Production profile')
         return paginated_post_list(request, annotated_posts(request.user).filter(production_id=pk))
 
 
 class PostLikeAPIView(APIView):
     def post(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        post = Post.objects.filter(pk=pk).first()
+        if post is None:
+            return not_found(request)
         PostLike.objects.get_or_create(post=post, user=request.user)
         return ok_response(request, 'Post liked.', data={'like_count': post.likes.count(), 'is_liked': True})
 
     def delete(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        post = Post.objects.filter(pk=pk).first()
+        if post is None:
+            return not_found(request)
         PostLike.objects.filter(post=post, user=request.user).delete()
         return ok_response(request, 'Like removed.', data={'like_count': post.likes.count(), 'is_liked': False})
 
 
 class PostShareAPIView(APIView):
     def post(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        post = Post.objects.filter(pk=pk).first()
+        if post is None:
+            return not_found(request)
         Post.objects.filter(pk=post.pk).update(share_count=F('share_count') + 1)
         post.refresh_from_db(fields=['share_count'])
         return ok_response(request, 'Post shared.', data={'share_count': post.share_count})
@@ -83,7 +98,8 @@ class PostShareAPIView(APIView):
 
 class PostCommentListCreateAPIView(APIView):
     def get(self, request, pk):
-        get_object_or_404(Post, pk=pk)
+        if not Post.objects.filter(pk=pk).exists():
+            return not_found(request)
         paginator = CommentCursorPagination()
         page = paginator.paginate_queryset(
             PostComment.objects.select_related('author').filter(post_id=pk), request, view=None,
@@ -92,9 +108,12 @@ class PostCommentListCreateAPIView(APIView):
         return ok_response(request, 'Comments fetched.', data=paginator.get_paginated_response(data).data)
 
     def post(self, request, pk):
-        post = get_object_or_404(Post, pk=pk)
+        post = Post.objects.filter(pk=pk).first()
+        if post is None:
+            return not_found(request)
         serializer = PostCommentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return validation_error(request, 'Please fix your comment.', serializer.errors)
         serializer.save(post=post, author=request.user)
         return ok_response(request, 'Comment added.', data=serializer.data, status_code=status.HTTP_201_CREATED)
 

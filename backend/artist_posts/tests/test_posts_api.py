@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from PIL import Image
 from rest_framework.test import APIClient
 
-from artist_posts.models import Follow
+from artist_posts.models import Follow, Post
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -183,3 +183,89 @@ class PeopleSearchAndFollowListTests(TestCase):
         self.assertNotIn('email', followers[0])
         following = client.get(f'/api/v1/users/{ravi.id}/following/').data['data']['people']
         self.assertEqual([p['name'] for p in following], ['Meera S'])
+
+
+class PostValidationAndAccessTests(TestCase):
+    def setUp(self):
+        self.asha = User.objects.create_user(email='asha@example.com', first_name='Asha', last_name='Rao', password='StrongPass123!')
+        self.ravi = User.objects.create_user(email='ravi@example.com', first_name='Ravi', last_name='K', password='StrongPass123!')
+        self.client = APIClient()
+        self.client.force_authenticate(self.asha)
+
+    def client_for(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_every_endpoint_requires_login(self):
+        anonymous = APIClient()
+        self.assertEqual(anonymous.get('/api/v1/posts/').status_code, 401)
+        self.assertEqual(anonymous.post('/api/v1/posts/', {'body': 'x'}, format='json').status_code, 401)
+        self.assertEqual(anonymous.get('/api/v1/users/search/', {'q': 'asha'}).status_code, 401)
+        self.assertEqual(anonymous.get(f'/api/v1/users/{self.asha.id}/').status_code, 401)
+
+    def test_body_and_comment_length_limits(self):
+        self.assertEqual(self.client.post('/api/v1/posts/', {'body': 'x' * 5001}, format='json').status_code, 400)
+        post_id = self.client.post('/api/v1/posts/', {'body': 'Hello'}, format='json').data['data']['id']
+        response = self.client.post(f'/api/v1/posts/{post_id}/comments/', {'body': 'x' * 1001}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'validation_error')
+
+    def test_video_post_is_accepted_and_bad_image_is_rejected(self):
+        clip = SimpleUploadedFile('clip.mp4', b'\x00\x00\x00\x18ftypmp42' + b'0' * 100, content_type='video/mp4')
+        response = self.client.post('/api/v1/posts/', {'body': 'Reel', 'media': clip}, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['data']['media_kind'], 'video')
+
+        fake = SimpleUploadedFile('photo.jpg', b'not an image', content_type='image/jpeg')
+        response = self.client.post('/api/v1/posts/', {'body': 'x', 'media': fake}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('media', response.data['field_errors'])
+
+    def test_replacing_media_deletes_the_old_file(self):
+        output = BytesIO()
+        Image.new('RGB', (50, 50)).save(output, format='PNG')
+        first = SimpleUploadedFile('a.png', output.getvalue(), content_type='image/png')
+        post_id = self.client.post('/api/v1/posts/', {'body': 'One', 'media': first}, format='multipart').data['data']['id']
+        old_name = Post.objects.get(pk=post_id).media.name
+
+        second = SimpleUploadedFile('b.png', output.getvalue(), content_type='image/png')
+        response = self.client.patch(f'/api/v1/posts/{post_id}/', {'media': second}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        post = Post.objects.get(pk=post_id)
+        self.assertNotEqual(post.media.name, old_name)
+        self.assertFalse(post.media.storage.exists(old_name))
+
+    def test_inactive_authors_disappear_from_everything(self):
+        post_id = self.client_for(self.ravi).post('/api/v1/posts/', {'body': 'Gone soon'}, format='json').data['data']['id']
+        self.ravi.is_active = False
+        self.ravi.save()
+
+        self.assertNotIn(post_id, [p['id'] for p in self.client.get('/api/v1/posts/').data['data']['posts']])
+        self.assertEqual(self.client.get(f'/api/v1/posts/{post_id}/').status_code, 404)
+        self.assertEqual(self.client.post(f'/api/v1/posts/{post_id}/like/').status_code, 404)
+        self.assertEqual(self.client.post(f'/api/v1/posts/{post_id}/comments/', {'body': 'hi'}, format='json').status_code, 404)
+        self.assertEqual(self.client.get(f'/api/v1/posts/{post_id}/comments/').status_code, 404)
+        self.assertEqual(self.client.get(f'/api/v1/users/{self.ravi.id}/').status_code, 404)
+
+    def test_any_signed_in_user_can_read_a_post_but_not_edit_it(self):
+        post_id = self.client_for(self.ravi).post('/api/v1/posts/', {'body': 'Shared link'}, format='json').data['data']['id']
+        response = self.client.get(f'/api/v1/posts/{post_id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['data']['is_mine'])
+        self.assertEqual(self.client.patch(f'/api/v1/posts/{post_id}/', {'body': 'x'}, format='json').status_code, 404)
+
+    def test_follow_rules(self):
+        self.assertEqual(self.client.post(f'/api/v1/users/{self.asha.id}/follow/').data['code'], 'cannot_follow_self')
+        self.ravi.is_active = False
+        self.ravi.save()
+        self.assertEqual(self.client.post(f'/api/v1/users/{self.ravi.id}/follow/').status_code, 404)
+        self.assertEqual(self.client.get(f'/api/v1/users/{self.ravi.id}/followers/').status_code, 404)
+
+    def test_comment_delete_on_another_post_is_not_found(self):
+        post_id = self.client_for(self.ravi).post('/api/v1/posts/', {'body': 'One'}, format='json').data['data']['id']
+        other_id = self.client.post('/api/v1/posts/', {'body': 'Two'}, format='json').data['data']['id']
+        comment_id = self.client.post(f'/api/v1/posts/{post_id}/comments/', {'body': 'Nice'}, format='json').data['data']['id']
+        response = self.client.delete(f'/api/v1/posts/{other_id}/comments/{comment_id}/')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'not_found')

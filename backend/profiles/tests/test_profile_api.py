@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -65,6 +66,7 @@ class ProfileApiTests(TestCase):
         shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self):
+        cache.clear()  # throttle counters live in the process-local cache
         self.client = APIClient()
         self.user = User.objects.create_user(
             email='artist@example.com',
@@ -350,3 +352,270 @@ class ArtistDirectoryFilterTests(TestCase):
 
     def test_invalid_filter_is_rejected(self):
         self.assertEqual(self.client.get('/api/v1/profile/directory/', {'gender': 'alien'}).status_code, 400)
+        self.assertEqual(self.client.get('/api/v1/profile/directory/', {'age_min': 200}).status_code, 400)
+
+
+class ArtistTestBase(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='artist@example.com',
+            first_name='Asha',
+            last_name='Rao',
+            password='StrongPass123!',
+            role='artist',
+            is_verified=True,
+        )
+        self.client.force_authenticate(self.user)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+@mock.patch('profiles.views.send_mail_in_background', _send)
+@mock.patch('profiles.media.check_face')
+class ProfileValidationTests(ArtistTestBase):
+    def test_options_list_every_choice(self, check_face_mock):
+        data = self.client.get('/api/v1/profile/options/').data['data']
+        self.assertIn('cinematographer', [item['value'] for item in data['disciplines']])
+        self.assertIn('certificate', [item['value'] for item in data['document_kinds']])
+        self.assertIn('kannada', [item['value'] for item in data['languages']])
+        self.assertIn('native', [item['value'] for item in data['language_levels']])
+
+    def test_profile_rejects_out_of_range_values(self, check_face_mock):
+        bad_values = {
+            'gender': 'alien',
+            'height_cm': 49,
+            'bio': 'x' * 1001,
+            'date_of_birth': timezone.localdate().isoformat(),
+            'instagram_url': 'https://example.com/asha',
+            'facebook_url': 'https://instagram.com/asha',
+            'showreel_links': ['https://vimeo.com/1', 'https://vimeo.com/2', 'https://vimeo.com/3',
+                               'https://vimeo.com/4', 'https://vimeo.com/5', 'https://vimeo.com/6'],
+        }
+        for field, value in bad_values.items():
+            response = self.client.patch('/api/v1/profile/', {field: value}, format='json')
+            self.assertEqual(response.status_code, 400, field)
+            self.assertEqual(response.data['code'], 'validation_error', field)
+            self.assertIn(field, response.data['field_errors'], field)
+
+        response = self.client.patch('/api/v1/profile/', {'date_of_birth': '1899-12-31'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_valid_social_and_showreel_links_are_saved(self, check_face_mock):
+        response = self.client.patch('/api/v1/profile/', {
+            'instagram_url': 'https://www.instagram.com/asha',
+            'facebook_url': 'https://www.facebook.com/asha',
+            'showreel_links': [
+                'https://vimeo.com/1', 'https://drive.google.com/file/d/1', 'https://www.youtube.com/watch?v=x',
+                'https://youtu.be/a', 'https://vimeo.com/2',
+            ],
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['instagram_url'], 'https://www.instagram.com/asha')
+        self.assertEqual(len(response.data['data']['showreel_links']), 5)
+
+    def test_alt_email_cannot_equal_login_email(self, check_face_mock):
+        response = self.client.patch('/api/v1/profile/', {'alt_email': self.user.email.upper()}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('alt_email', response.data['field_errors'])
+
+    def test_profile_ignores_fields_it_does_not_own(self, check_face_mock):
+        response = self.client.patch('/api/v1/profile/', {'role': 'production_house', 'is_verified': False}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.role, 'artist')
+        self.assertTrue(self.user.is_verified)
+
+    def test_blank_username_clears_it(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'username': 'asha_rao'}, format='json')
+        response = self.client.patch('/api/v1/profile/', {'username': ''}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data['data']['username'])
+
+    def test_username_check_for_own_name_is_available(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'username': 'asha_rao'}, format='json')
+        data = self.client.get('/api/v1/profile/username-check/?username=asha_rao').data['data']
+        self.assertTrue(data['available'])
+        self.assertEqual(data['suggestions'], [])
+
+    def test_username_check_rejects_non_artists(self, check_face_mock):
+        producer = User.objects.create_user('studio@example.com', 'StrongPass123!', role='production_house')
+        self.client.force_authenticate(producer)
+        self.assertEqual(self.client.get('/api/v1/profile/username-check/?username=asha').status_code, 403)
+        self.assertEqual(self.client.put('/api/v1/profile/languages/', {'languages': []}, format='json').status_code, 403)
+        self.assertEqual(self.client.post('/api/v1/profile/documents/', {}, format='multipart').status_code, 403)
+
+    def test_every_profile_endpoint_requires_login(self, check_face_mock):
+        anonymous = APIClient()
+        self.assertEqual(anonymous.get('/api/v1/profile/').status_code, 401)
+        self.assertEqual(anonymous.get('/api/v1/profile/directory/').status_code, 401)
+        self.assertEqual(anonymous.get('/api/v1/profile/username-check/?username=asha').status_code, 401)
+        self.assertEqual(anonymous.post('/api/v1/profile/alt-email/send-pin/').status_code, 401)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+@mock.patch('profiles.views.send_mail_in_background', _send)
+@mock.patch('profiles.media.check_face')
+class ProfileUploadTests(ArtistTestBase):
+    def test_photo_delete_removes_slot_and_file(self, check_face_mock):
+        self.client.put('/api/v1/profile/photos/left/', {'file': make_image()}, format='multipart')
+        name = ArtistProfile.objects.get(user=self.user).photo_left.name
+
+        response = self.client.delete('/api/v1/profile/photos/left/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data['data']['photos']['left'])
+        profile = ArtistProfile.objects.get(user=self.user)
+        self.assertFalse(profile.photo_left)
+        self.assertFalse(profile.photo_left.storage.exists(name))
+
+        self.assertEqual(self.client.delete('/api/v1/profile/photos/back/').status_code, 404)
+
+    def test_photo_put_without_file_or_wrong_type_is_rejected(self, check_face_mock):
+        response = self.client.put('/api/v1/profile/photos/left/', {}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'validation_error')
+
+        text = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+        response = self.client.put('/api/v1/profile/photos/left/', {'file': text}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'invalid_upload')
+
+    def test_profile_photo_replacement_deletes_old_file(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'profile_photo': make_image()}, format='multipart')
+        old = ArtistProfile.objects.get(user=self.user).profile_photo.name
+
+        self.client.patch('/api/v1/profile/', {'profile_photo': make_image()}, format='multipart')
+        profile = ArtistProfile.objects.get(user=self.user)
+        self.assertNotEqual(profile.profile_photo.name, old)
+        self.assertFalse(profile.profile_photo.storage.exists(old))
+
+    def test_media_delete_removes_item_and_file(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'disciplines': ['actor']}, format='json')
+        self.client.put('/api/v1/profile/media/actor/love/', {'file': make_video(3)}, format='multipart')
+        item = PortfolioMedia.objects.get(profile__user=self.user, slot='love')
+        name = item.file.name
+
+        response = self.client.delete('/api/v1/profile/media/actor/love/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(PortfolioMedia.objects.filter(pk=item.pk).exists())
+        self.assertFalse(item.file.storage.exists(name))
+        love = response.data['data']['media_slots'][0]['slots'][0]
+        self.assertIsNone(love['file'])
+
+    def test_media_rejects_wrong_extension_missing_file_and_unknown_discipline(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'disciplines': ['actor']}, format='json')
+
+        wav = SimpleUploadedFile('clip.wav', b'RIFF', content_type='audio/wav')
+        response = self.client.put('/api/v1/profile/media/actor/love/', {'file': wav}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'invalid_upload')
+
+        response = self.client.put('/api/v1/profile/media/actor/love/', {}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'validation_error')
+
+        response = self.client.put('/api/v1/profile/media/dancer/video_1/', {'file': make_video(3)}, format='multipart')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'not_found')
+
+    def test_document_rejects_unknown_kind(self, check_face_mock):
+        pdf = SimpleUploadedFile('award.pdf', b'%PDF-1.4 test', content_type='application/pdf')
+        response = self.client.post('/api/v1/profile/documents/', {'kind': 'diploma', 'title': 'X', 'file': pdf}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('kind', response.data['field_errors'])
+
+    def test_document_limit_is_enforced(self, check_face_mock):
+        profile = ArtistProfile.objects.create(user=self.user)
+        ProfileDocument.objects.bulk_create(
+            ProfileDocument(profile=profile, kind='certificate', title=f'Doc {n}', file='docs/doc.pdf') for n in range(20)
+        )
+        pdf = SimpleUploadedFile('award.pdf', b'%PDF-1.4 test', content_type='application/pdf')
+        response = self.client.post('/api/v1/profile/documents/', {'kind': 'certificate', 'title': 'Extra', 'file': pdf}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'document_limit')
+
+    def test_cannot_delete_another_artists_document(self, check_face_mock):
+        other = User.objects.create_user('other@example.com', 'StrongPass123!', role='artist')
+        other_profile = ArtistProfile.objects.create(user=other)
+        document = ProfileDocument.objects.create(profile=other_profile, kind='certificate', title='Theirs', file='docs/x.pdf')
+
+        response = self.client.delete(f'/api/v1/profile/documents/{document.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(ProfileDocument.objects.filter(pk=document.pk).exists())
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+@mock.patch('profiles.views.send_mail_in_background', _send)
+@mock.patch('profiles.media.check_face')
+class ProfileLanguageAndPinTests(ArtistTestBase):
+    def test_languages_reject_unknown_language_level_and_empty_list(self, check_face_mock):
+        for payload in (
+            {'languages': [{'language': 'klingon', 'level': 'native'}]},
+            {'languages': [{'language': 'hindi', 'level': 'expert'}]},
+            {'languages': []},
+        ):
+            response = self.client.put('/api/v1/profile/languages/', payload, format='json')
+            self.assertEqual(response.status_code, 400, payload)
+            self.assertEqual(response.data['code'], 'validation_error')
+
+    def test_languages_put_replaces_previous_list(self, check_face_mock):
+        self.client.put('/api/v1/profile/languages/', {'languages': [{'language': 'hindi', 'level': 'fluent'}]}, format='json')
+        response = self.client.put('/api/v1/profile/languages/', {'languages': [{'language': 'tamil', 'level': 'basic'}]}, format='json')
+        self.assertEqual([item['language'] for item in response.data['data']['languages']], ['tamil'])
+
+    def test_send_pin_requires_alt_email(self, check_face_mock):
+        response = self.client.post('/api/v1/profile/alt-email/send-pin/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('alt_email', response.data['field_errors'])
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_send_pin_is_skipped_when_already_verified(self, check_face_mock):
+        ArtistProfile.objects.create(user=self.user, alt_email='asha.alt@example.com', alt_email_verified_at=timezone.now())
+        response = self.client.post('/api/v1/profile/alt-email/send-pin/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['message'], 'This email is already verified.')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_verify_rejects_malformed_pin(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'alt_email': 'asha.alt@example.com'}, format='json')
+        response = self.client.post('/api/v1/profile/alt-email/verify/', {'pin': 'abc123'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'validation_error')
+
+    def test_verify_without_sent_pin_reports_expired(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'alt_email': 'asha.alt@example.com'}, format='json')
+        response = self.client.post('/api/v1/profile/alt-email/verify/', {'pin': '123456'}, format='json')
+        self.assertEqual(response.data['code'], 'pin_expired')
+
+    def test_send_pin_is_throttled(self, check_face_mock):
+        self.client.patch('/api/v1/profile/', {'alt_email': 'asha.alt@example.com'}, format='json')
+        for _ in range(5):
+            self.assertEqual(self.client.post('/api/v1/profile/alt-email/send-pin/').status_code, 200)
+        response = self.client.post('/api/v1/profile/alt-email/send-pin/')
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('detail', response.data)
+
+
+class ArtistDirectoryPrivacyTests(ArtistTestBase):
+    def test_directory_requires_login_and_hides_private_fields(self):
+        ArtistProfile.objects.create(
+            user=self.user, username='asha_rao', disciplines=['actor'], phone='+919876543210', location='Mangaluru',
+        )
+        viewer = User.objects.create_user('viewer@example.com', 'StrongPass123!', role='production_house')
+        self.client.force_authenticate(viewer)
+
+        results = self.client.get('/api/v1/profile/directory/').data['data']['results']
+        self.assertEqual(len(results), 1)
+        self.assertEqual(
+            set(results[0]),
+            {'id', 'user_id', 'username', 'display_name', 'profile_photo', 'disciplines', 'location'},
+        )
+        self.assertEqual(results[0]['display_name'], 'Asha Rao')
+
+        self.assertEqual(APIClient().get('/api/v1/profile/directory/').status_code, 401)
+
+    def test_directory_skips_profiles_without_disciplines(self):
+        ArtistProfile.objects.create(user=self.user)
+        viewer = User.objects.create_user('viewer@example.com', 'StrongPass123!', role='production_house')
+        self.client.force_authenticate(viewer)
+        self.assertEqual(self.client.get('/api/v1/profile/directory/').data['data']['results'], [])
