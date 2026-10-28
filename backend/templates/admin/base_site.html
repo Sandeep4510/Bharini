@@ -1,0 +1,106 @@
+{% extends "admin/base.html" %}
+{% comment %}
+  Bharini look for the Django admin: the app's dark slate + violet palette, set through the
+  CSS variables admin/css/base.css reads. Bharini is dark-only, so the light/dark toggle is hidden
+  and both admin themes get the same colours.
+{% endcomment %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  :root,
+  html[data-theme="light"],
+  html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --primary: #8b5cf6;          /* violet-500, the app accent */
+    --secondary: #6d28d9;        /* violet-700 */
+    --accent: #c4b5fd;           /* violet-300 */
+    --primary-fg: #ffffff;
+
+    --body-fg: #e2e8f0;          /* slate-200 */
+    --body-bg: #020817;          /* app background */
+    --body-quiet-color: #94a3b8; /* slate-400 */
+    --body-medium-color: #cbd5e1;
+    --body-loud-color: #ffffff;
+
+    --header-color: #e2e8f0;
+    --header-branding-color: #ffffff;
+    --header-bg: #0f172a;        /* slate-900, the card colour */
+    --header-link-color: #e2e8f0;
+
+    --breadcrumbs-fg: #c4b5fd;
+    --breadcrumbs-link-fg: #ffffff;
+    --breadcrumbs-bg: #1e1b4b;   /* deep violet strip */
+
+    --link-fg: #c4b5fd;
+    --link-hover-color: #ddd6fe;
+    --link-selected-fg: #a78bfa;
+
+    --hairline-color: #1e293b;   /* slate-800 */
+    --border-color: #334155;     /* slate-700 */
+
+    --error-fg: #fca5a5;         /* red-300 */
+    --message-debug-bg: #1e293b;
+    --message-info-bg: #1e1b4b;
+    --message-success-bg: #052e16;
+    --message-warning-bg: #422006;
+    --message-error-bg: #450a0a;
+
+    --darkened-bg: #0f172a;
+    --selected-bg: #2e1065;      /* violet-950 */
+    --selected-row: #1e1b4b;
+
+    --button-fg: #ffffff;
+    --button-bg: #8b5cf6;
+    --button-hover-bg: #a78bfa;
+    --default-button-bg: #7c3aed;
+    --default-button-hover-bg: #8b5cf6;
+    --close-button-bg: #334155;
+    --close-button-hover-bg: #475569;
+    --delete-button-bg: #b91c1c;
+    --delete-button-hover-bg: #dc2626;
+
+    --object-tools-fg: #ffffff;
+    --object-tools-bg: #334155;
+    --object-tools-hover-bg: #8b5cf6;
+
+    --font-family-primary: Arial, Helvetica, sans-serif; /* same stack as the web app body */
+  }
+
+  .theme-toggle { display: none; }
+
+  #header { border-bottom: 1px solid var(--hairline-color); }
+  #site-name a { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; letter-spacing: -0.01em; }
+  .bharini-logo {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 9999px;
+    background: var(--primary); color: #fff; font-weight: 700;
+  }
+
+  /* rounded cards and inputs like the app */
+  .module, .inline-group, #changelist-filter, .selector-available, .selector-chosen { border-radius: 16px; overflow: hidden; }
+  .module h2, .module caption, .inline-group h2 { background: var(--secondary); }
+  input[type=text], input[type=password], input[type=email], input[type=url], input[type=number], input[type=tel],
+  input[type=search], textarea, select, .vTextField {
+    background: #020817; color: var(--body-fg); border: 1px solid var(--border-color); border-radius: 10px;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+  .button, input[type=submit], input[type=button], .submit-row input, a.button { border-radius: 10px; }
+  #changelist table thead th, table thead th { background: var(--darkened-bg); }
+  tr:nth-child(even) td, tr:nth-child(even) th { background: rgba(15, 23, 42, 0.6); }
+
+  /* login page */
+  .login #container { background: var(--darkened-bg); border: 1px solid var(--hairline-color); border-radius: 24px; overflow: hidden; }
+  .login #header { background: var(--header-bg); }
+</style>
+{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}"><span class="bharini-logo" aria-hidden="true">B</span>{{ site_header|default:_('Django administration') }}</a>
+</div>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

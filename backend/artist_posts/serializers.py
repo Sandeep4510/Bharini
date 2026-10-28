@@ -22,7 +22,7 @@ def user_summary(request, user):
         'id': user.id,
         'name': production.name if production else user.get_full_name() or 'Bharini member',
         'role': user.role,
-        'username': profile.username if profile else None,
+        'username': profile.username if profile else production.username if production else None,
         'profile_photo': absolute_url(request, photo),
         # production houses link to their /productions/<id> page instead of /u/<id>
         'production_id': production.id if production else None,

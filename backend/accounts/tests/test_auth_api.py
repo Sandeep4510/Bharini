@@ -239,3 +239,17 @@ class AuthApiTests(TestCase):
         with self.settings(SOCIALACCOUNT_PROVIDERS={'google': {'APPS': []}}):
             response = browser.get('/api/v1/auth/social/google/start/')
             self.assertIn('social_error=not_configured', response['Location'])
+
+
+class ChooseRoleTests(TestCase):
+    def test_google_signup_without_role_picks_once(self):
+        user = User.objects.create_user(email='g@example.com', password='StrongPass123!', role_confirmed=False, is_verified=True)
+        self.client = APIClient()
+        self.client.force_authenticate(user)
+        self.assertFalse(self.client.get('/api/v1/auth/me/').data['data']['role_confirmed'])
+        self.assertEqual(self.client.post('/api/v1/auth/choose-role/', {'role': 'admin'}, format='json').status_code, 400)
+        response = self.client.post('/api/v1/auth/choose-role/', {'role': 'production_house'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual((response.data['data']['role'], response.data['data']['role_confirmed']), ('production_house', True))
+        # cannot switch again afterwards
+        self.assertEqual(self.client.post('/api/v1/auth/choose-role/', {'role': 'artist'}, format='json').status_code, 400)

@@ -202,6 +202,13 @@ export class ApiClient {
     });
   }
 
+  chooseRole(role: 'artist' | 'production_house') {
+    return this.request<AuthApiResponse<AuthUser>>('/api/v1/auth/choose-role/', {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+  }
+
   me() {
     return this.request<AuthApiResponse<AuthUser>>('/api/v1/auth/me/');
   }

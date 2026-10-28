@@ -21,6 +21,8 @@ class User(AbstractUser):
         default=Roles.ARTIST,
     )
     is_verified = models.BooleanField(default=False)
+    # False only for Google sign-ups that started without a role; they pick one before using the app
+    role_confirmed = models.BooleanField(default=True)
     email_verified_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = 'email'

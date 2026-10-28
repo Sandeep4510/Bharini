@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import { apiClient } from '@bharini/api-client';
 import type { SharedPostRef, UserSummary } from '@bharini/types';
 
 import { Avatar } from '@/components/artist-post-card';
+import { SendIcon } from '@/components/post-icons';
 import { errorMessage, inputClass, okBorder, secondaryButton } from '@/components/profile-fields';
 
 const smallSend = 'rounded-lg bg-violet-500 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50';
@@ -19,20 +20,24 @@ export function ShareButton({
   path,
   title,
   className,
-  label = '↗ Share',
+  label = (
+    <>
+      <SendIcon /> Share
+    </>
+  ),
   onShared,
 }: {
   post: SharedPostRef;
   path: string;
   title: string;
   className: string;
-  label?: string;
+  label?: ReactNode;
   onShared?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" className={className}>
+      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Share" title="Share" className={className}>
         {label}
       </button>
       {open ? <ShareDialog post={post} path={path} title={title} onShared={onShared} onClose={() => setOpen(false)} /> : null}

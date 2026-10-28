@@ -29,6 +29,7 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         user = super().populate_user(request, sociallogin, data)
         role = request.session.get(SOCIAL_ROLE_SESSION_KEY)
         user.role = role if role in SIGNUP_ROLES else User.Roles.ARTIST
+        user.role_confirmed = role in SIGNUP_ROLES
         mark_verified(user)
         return user
 

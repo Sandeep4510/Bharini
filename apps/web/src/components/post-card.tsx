@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { apiClient } from '@bharini/api-client';
 import type { CastingCallDetails, Post, PostComment } from '@bharini/types';
 
+import { CommentIcon, HeartIcon, SendIcon } from '@/components/post-icons';
 import { ShareButton } from '@/components/share-menu';
 
 const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
@@ -147,24 +148,33 @@ export function PostCard({ post: initial }: { post: Post }) {
         <button
           type="button"
           onClick={() => void toggleLike()}
-          className="rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
+          aria-pressed={post.is_liked}
+          aria-label={post.is_liked ? 'Unlike' : 'Like'}
+          title={post.is_liked ? 'Unlike' : 'Like'}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 hover:bg-slate-800 ${post.is_liked ? 'text-red-400' : 'text-slate-200'}`}
         >
-          {post.is_liked ? '♥' : '♡'} Like · {post.like_count}
+          <HeartIcon filled={post.is_liked} /> {post.like_count}
         </button>
         <button
           type="button"
           onClick={() => void toggleComments()}
-          className="rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
+          aria-label="Comments"
+          title="Comments"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
         >
-          💬 Comment · {post.comment_count}
+          <CommentIcon /> {post.comment_count}
         </button>
         <ShareButton
           post={{ kind: 'production', id: post.id }}
           path={`/productions/${production.id}#post-${post.id}`}
           title={`Post by ${production.name}`}
-          label={`↗ Share · ${post.share_count}`}
+          label={
+            <>
+              <SendIcon /> {post.share_count}
+            </>
+          }
           onShared={() => void countShare()}
-          className="rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800"
         />
       </footer>
 

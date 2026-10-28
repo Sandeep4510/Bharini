@@ -5,11 +5,12 @@ import { useState, type FormEvent } from 'react';
 import { apiClient } from '@bharini/api-client';
 import type { Production, ProductionKind } from '@bharini/types';
 
-import { ErrorBanner, Field, inputClass, okBorder, primaryButton, secondaryButton } from '@/components/profile-fields';
+import { ErrorBanner, Field, inputClass, okBorder, primaryButton, secondaryButton, fieldErrorsFrom } from '@/components/profile-fields';
 
 export function ProductionForm({ onSaved }: { onSaved: (production: Production) => void }) {
   const [kind, setKind] = useState<ProductionKind>('house');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [picture, setPicture] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -23,11 +24,12 @@ export function ProductionForm({ onSaved }: { onSaved: (production: Production) 
       const payload = new FormData();
       payload.append('kind', kind);
       payload.append('name', name);
+      payload.append('username', username.trim().toLowerCase());
       if (picture) payload.append('profile_picture', picture);
       const res = await apiClient.createProduction(payload);
       if (res.data) onSaved(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create profile.');
+      setError(fieldErrorsFrom(err).username || (err instanceof Error ? err.message : 'Could not create profile.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -79,6 +81,22 @@ export function ProductionForm({ onSaved }: { onSaved: (production: Production) 
             placeholder="Bharini Pictures"
             className={`${inputClass} ${okBorder}`}
           />
+        </Field>
+
+        <Field label="Username" hint="3-30 lowercase letters, numbers, dots or underscores. Artists find you by it.">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">@</span>
+            <input
+              value={username}
+              onChange={(event) => setUsername(event.target.value.toLowerCase())}
+              required
+              maxLength={30}
+              pattern="[a-z0-9_.]{3,30}"
+              placeholder="bharini.pictures"
+              autoCapitalize="none"
+              className={`${inputClass} ${okBorder}`}
+            />
+          </div>
         </Field>
 
         <Field label="Profile picture" hint="Optional, but recommended for a polished production home page.">

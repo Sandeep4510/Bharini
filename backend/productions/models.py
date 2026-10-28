@@ -1,5 +1,8 @@
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
+
+from profiles.models import USERNAME_PATTERN
 
 
 class ProductionProfile(models.Model):
@@ -14,6 +17,14 @@ class ProductionProfile(models.Model):
     )
     kind = models.CharField(max_length=20, choices=Kind.choices)
     name = models.CharField(max_length=150)
+    # shares one namespace with artist usernames (checked in profiles.serializers.username_taken)
+    username = models.CharField(
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(USERNAME_PATTERN, 'Use 3-30 lowercase letters, numbers, dots or underscores.')],
+    )
     profile_picture = models.ImageField(upload_to='productions/pictures/', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

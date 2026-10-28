@@ -21,6 +21,10 @@ from django.urls import include, path
 
 from artist_posts.urls import user_urlpatterns
 
+admin.site.site_header = 'Bharini admin'
+admin.site.site_title = 'Bharini admin'
+admin.site.index_title = 'Manage Bharini'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('accounts.urls')),

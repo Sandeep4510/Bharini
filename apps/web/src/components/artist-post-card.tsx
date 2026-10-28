@@ -16,6 +16,7 @@ import {
   primaryButton,
   secondaryButton,
 } from '@/components/profile-fields';
+import { CommentIcon, HeartIcon } from '@/components/post-icons';
 import { ShareButton } from '@/components/share-menu';
 import { profileHref } from '@/lib/routes';
 
@@ -377,17 +378,21 @@ export function PostCard({
           disabled={busy}
           onClick={() => void toggleLike()}
           aria-pressed={post.liked}
-          className={`${actionButton} ${post.liked ? 'text-pink-300' : ''}`}
+          aria-label={post.liked ? 'Unlike' : 'Like'}
+          title={post.liked ? 'Unlike' : 'Like'}
+          className={`${actionButton} ${post.liked ? 'text-red-400' : ''}`}
         >
-          {post.liked ? '♥' : '♡'} {post.like_count} {post.like_count === 1 ? 'Like' : 'Likes'}
+          <HeartIcon filled={post.liked} /> {post.like_count}
         </button>
         <button
           type="button"
           onClick={() => setShowComments((shown) => !shown)}
           aria-expanded={showComments}
+          aria-label="Comments"
+          title="Comments"
           className={actionButton}
         >
-          💬 {post.comment_count} {post.comment_count === 1 ? 'Comment' : 'Comments'}
+          <CommentIcon /> {post.comment_count}
         </button>
         <ShareButton post={{ kind: 'artist', id: post.id }} path={`/posts/${post.id}`} title={`Post by ${post.author.name}`} className={actionButton} />
       </div>

@@ -221,6 +221,12 @@ function formatTitleCredits(production: Production, kind: 'movie' | 'serial') {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role_confirmed === false) router.replace('/auth/choose-role');
+  }, [user, router]);
+
   return user?.role === 'artist' ? <ArtistHome /> : <ProductionHome />;
 }

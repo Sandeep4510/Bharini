@@ -8,6 +8,7 @@ export type AuthUser = {
   last_name: string;
   role: UserRole;
   is_verified: boolean;
+  role_confirmed?: boolean;
   email_verified_at?: string | null;
   date_joined: string;
   onboarding_complete?: boolean;
@@ -213,6 +214,7 @@ export type TitleCredit = {
 };
 
 export type Production = ProductionSummary & {
+  username: string | null;
   title_credits: TitleCredit[];
   is_owner: boolean;
   created_at: string;

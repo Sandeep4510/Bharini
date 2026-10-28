@@ -14,5 +14,5 @@ test_cameraman@bharini.com               Artist / Technician    cinematographer 
 test_actor_singer@bharini.com            Artist / Technician    actor, singer                    @test_actor_singer
 test_singer_musician@bharini.com         Artist / Technician    singer, musician                 @test_singer_musician
 test_actor_choreographer@bharini.com     Artist / Technician    actor, choreographer             @test_actor_choreographer
-test_production_house@bharini.com        Production house       house · "Test Productions"       -
-test_producer@bharini.com                Production house       individual · "Test Producer"     -
+test_production_house@bharini.com        Production house       house · "Test Productions"       @test_production_house
+test_producer@bharini.com                Production house       individual · "Test Producer"     @test_producer

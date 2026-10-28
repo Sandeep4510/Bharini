@@ -206,6 +206,8 @@ def social_start(request, provider):
     role = request.GET.get('role')
     if role in SIGNUP_ROLES:
         request.session[SOCIAL_ROLE_SESSION_KEY] = role
+    else:  # started from the login page: a new account will be asked for its role
+        request.session.pop(SOCIAL_ROLE_SESSION_KEY, None)
     return redirect(f'/accounts/{provider}/login/')
 
 
@@ -489,3 +491,21 @@ class SessionRevokeAPIView(APIView):
             session.save(update_fields=['revoked_at', 'revoked_reason'])
 
         return ok_response(request, message='Session revoked successfully.')
+
+
+class ChooseRoleAPIView(APIView):
+    """One-time role pick for accounts created by Google sign-in without a role."""
+
+    def post(self, request, *args, **kwargs):
+        role = request.data.get('role')
+        if role not in SIGNUP_ROLES:
+            return error_response(
+                request, 'validation_error', 'Choose Artist / Technician or Production house.', status.HTTP_400_BAD_REQUEST,
+                field_errors={'role': ['Choose Artist / Technician or Production house.']},
+            )
+        if request.user.role_confirmed:
+            return error_response(request, 'role_already_set', 'Your account type is already set.', status.HTTP_400_BAD_REQUEST)
+        request.user.role = role
+        request.user.role_confirmed = True
+        request.user.save(update_fields=['role', 'role_confirmed'])
+        return ok_response(request, message='Account type saved.', data=UserSerializer(request.user).data)

@@ -26,7 +26,16 @@ def absolute_url(request, field_file):
 
 
 def username_taken(username, profile=None):
-    return ArtistProfile.objects.filter(username=username).exclude(pk=getattr(profile, 'pk', None)).exists()
+    """Artists and production houses share one username space; `profile` (either kind) is the one being edited."""
+    from productions.models import ProductionProfile  # productions imports profiles, so import here
+
+    artists = ArtistProfile.objects.filter(username=username)
+    productions = ProductionProfile.objects.filter(username=username)
+    if isinstance(profile, ArtistProfile):
+        artists = artists.exclude(pk=profile.pk)
+    elif isinstance(profile, ProductionProfile):
+        productions = productions.exclude(pk=profile.pk)
+    return artists.exists() or productions.exists()
 
 
 def suggest_usernames(wanted, profile, count=4):

@@ -89,6 +89,7 @@ export function ProductionProfileView({ productionId }: { productionId: number }
             {kindLabel}
           </span>
           <h1 className="mt-2 text-3xl font-semibold text-white">{production.name}</h1>
+          {production.username ? <p className="mt-1 text-slate-300">@{production.username}</p> : null}
           {made.length || partOf.length ? (
             <p className="mt-2 text-sm text-slate-400">
               {[made.length && `${made.length} titles made`, partOf.length && `${partOf.length} collaborations`].filter(Boolean).join(' · ')}

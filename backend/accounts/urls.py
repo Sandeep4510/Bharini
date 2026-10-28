@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     LoginAPIView,
     LogoutAPIView,
+    ChooseRoleAPIView,
     MeAPIView,
     PasswordResetConfirmAPIView,
     PasswordResetRequestAPIView,
@@ -29,6 +30,7 @@ urlpatterns = [
     path('social/complete/', social_complete, name='auth-social-complete'),
     path('social/exchange/', SocialExchangeAPIView.as_view(), name='auth-social-exchange'),
     path('me/', MeAPIView.as_view(), name='auth-me'),
+    path('choose-role/', ChooseRoleAPIView.as_view(), name='auth-choose-role'),
     path('sessions/', SessionListAPIView.as_view(), name='auth-sessions'),
     path('sessions/<uuid:session_id>/revoke/', SessionRevokeAPIView.as_view(), name='auth-session-revoke'),
 ]

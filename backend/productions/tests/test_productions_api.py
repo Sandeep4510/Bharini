@@ -25,12 +25,12 @@ class ProductionProfileAPITests(APITestCase):
         self.client.force_authenticate(self.owner)
 
     def test_owner_creates_profile_once(self):
-        payload = {'name': 'Kumar Films', 'kind': 'house'}
+        payload = {'name': 'Kumar Films', 'kind': 'house', 'username': 'kumar_films'}
         created = self.client.post('/api/v1/productions/', payload, format='json')
         self.assertEqual(created.status_code, 201)
         self.assertTrue(created.json()['data']['is_owner'])
 
-        again = self.client.post('/api/v1/productions/', payload, format='json')
+        again = self.client.post('/api/v1/productions/', {**payload, 'username': 'kumar_films_two'}, format='json')
         self.assertEqual(again.status_code, 400)
         self.assertEqual(ProductionProfile.objects.filter(owner=self.owner).count(), 1)
 
@@ -54,7 +54,7 @@ class ProductionProfileAPITests(APITestCase):
 
     def test_profile_picture_must_be_an_image(self):
         fake = SimpleUploadedFile('avatar.png', b'not an image', content_type='image/png')
-        response = self.client.post('/api/v1/productions/', {'name': 'X', 'kind': 'individual', 'profile_picture': fake}, format='multipart')
+        response = self.client.post('/api/v1/productions/', {'name': 'X', 'kind': 'individual', 'username': 'x_films', 'profile_picture': fake}, format='multipart')
         self.assertEqual(response.status_code, 400)
         self.assertIn('profile_picture', response.json())
 
@@ -70,3 +70,23 @@ class ProductionFollowCountsTests(APITestCase):
         self.client.post(f'/api/v1/users/{owner.id}/follow/')
         data = self.client.get(f'/api/v1/productions/{production.id}/').data['data']
         self.assertEqual((data['follower_count'], data['following_count'], data['is_following']), (1, 0, True))
+
+
+class ProductionUsernameTests(APITestCase):
+    def test_username_required_unique_across_artists(self):
+        from profiles.models import ArtistProfile
+
+        artist = User.objects.create_user('a@example.com', 'StrongPass123!', role='artist')
+        ArtistProfile.objects.create(user=artist, username='kumar.films')
+        owner = User.objects.create_user('o@example.com', 'StrongPass123!', role='production_house')
+        self.client.force_authenticate(owner)
+
+        response = self.client.post('/api/v1/productions/', {'name': 'Kumar Films', 'kind': 'house'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        response = self.client.post('/api/v1/productions/', {'name': 'Kumar Films', 'kind': 'house', 'username': 'Kumar.Films'}, format='json')
+        self.assertEqual(response.status_code, 400)  # an artist already has it
+        response = self.client.post('/api/v1/productions/', {'name': 'Kumar Films', 'kind': 'house', 'username': 'Kumar_Films'}, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['data']['username'], 'kumar_films')
+        me = self.client.get('/api/v1/auth/me/').data['data']
+        self.assertEqual(me['username'], 'kumar_films')

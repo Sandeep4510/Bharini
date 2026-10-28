@@ -208,6 +208,7 @@ def matching_name(users, query):
             | Q(last_name__icontains=word)
             | Q(artist_profile__username__icontains=word)
             | Q(production_profile__name__icontains=word)
+            | Q(production_profile__username__icontains=word)
         )
     return users
 
