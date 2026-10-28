@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from accounts.responses import error_response, ok_response
 from connections.models import Block, blocked_ids, connection_status
+from notifications.push import notify
 from profiles.models import Discipline
 from profiles.serializers import ArtistProfileSerializer
 
@@ -248,7 +249,10 @@ class FollowAPIView(APIView):
             return not_found(request, 'Profile')
         if user.id == request.user.id:
             return error_response(request, 'cannot_follow_self', 'You cannot follow yourself.', status.HTTP_400_BAD_REQUEST)
-        Follow.objects.get_or_create(follower=request.user, followee=user)
+        _, created = Follow.objects.get_or_create(follower=request.user, followee=user)
+        if created:
+            name = user_summary(request, request.user)['name']
+            notify([user], 'follows', 'New follower', f'{name} started following you.', {'user_id': request.user.id})
         return self.respond(request, user)
 
     def delete(self, request, user_id, *args, **kwargs):

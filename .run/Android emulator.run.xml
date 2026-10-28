@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Android emulator (Pixel 8 API 35)" type="js.build_tools.npm">
+    <package-json value="$PROJECT_DIR$/apps/mobile/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="emulator" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>

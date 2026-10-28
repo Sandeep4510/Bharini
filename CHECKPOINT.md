@@ -144,6 +144,121 @@ All migrations below are applied to the dev database. `manage.py check` and the 
   - CI.
 - **Never clicked through in a real browser:** settings, restore, terms, block, choose-role, share menu.
 
+## Mobile app (`apps/mobile`, Expo SDK 58, development build) — slice 1 of 4
+Build order agreed with the user: (1) Login → (2) Home feed, Profile, Messages → (3) Onboarding with camera + volume-button capture → (4) Push notifications. The user has an Apple Developer account. iOS dev builds are planned through EAS cloud later.
+- **Dev build:** `expo-dev-client` is installed, so Expo Go is not used.
+  - `npm run android` (`expo run:android`) builds and installs the app and starts Metro. Rebuild only when native dependencies change; otherwise `npm run start`.
+  - `apps/mobile/android` and `apps/mobile/ios` are generated (Continuous Native Generation) and gitignored.
+- **Java:** the system `JAVA_HOME` is a JRE 21 with no compiler. Builds need `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`, which the PyCharm run config sets.
+- **PyCharm run configs** in `.run/`:
+  - "Android emulator (Pixel 8 API 35)": `npm run emulator`, via `apps/mobile/scripts/start-emulator.js`.
+  - "Mobile: build & run on Android (dev build)".
+  - "Mobile: dev server".
+- **Environment:** `apps/mobile/.env` (gitignored; copy of `.env.example`) sets `EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8000` and `EXPO_PUBLIC_WEB_URL=http://10.0.2.2:3000`. `10.0.2.2` is the host computer as seen from the emulator; it is in Django's `ALLOWED_HOSTS` (settings default and `backend/.env`).
+- **Shared code:**
+  - `packages/auth` has pluggable storage (`setSessionStorage`): localStorage on the web, SecureStore on mobile, registered in `apps/mobile/src/lib/auth.tsx`.
+  - `packages/api-client` reads `NEXT_PUBLIC_API_BASE_URL` or `EXPO_PUBLIC_API_BASE_URL`.
+  - New `packages/theme` holds the colour, radius, spacing and font-size tokens.
+- **Screens:**
+  - Routing uses `Stack.Protected`: `src/app/(auth)/login.tsx` when signed out, `src/app/(tabs)` with NativeTabs (Home, Search, Messages, Profile) when signed in.
+  - Home shows "Hi {first name}" and a Log out button; the other tabs are placeholders.
+  - Register and forgot password open the website.
+  - UI pieces live in `src/components/ui.tsx`.
+- **Checks:** in `apps/mobile`, `npx tsc --noEmit`, `npx expo lint` and `npx expo-doctor`. expo-doctor wrongly says `.expo` is not ignored; it only reads a local `.gitignore`, but the root one covers it.
+- **Routes:** `src/app/index.tsx` redirects to `/home` or `/login`. The Home tab is `(tabs)/home.tsx`. `Stack.Protected` with `redirectTo` cannot handle the very first URL on its own.
+- **Windows long paths (required):** React Native's C++ builds exceed 260 characters.
+  - `LongPathsEnabled=1` is set (done by the user as admin).
+  - CMake 3.31.6 (ninja 1.12.1) is installed in the SDK. `apps/mobile/android/local.properties` holds `cmake.dir=…\cmake\3.31.6`.
+  - The `android/` folder is generated: re-add that line after `expo prebuild --clean`. CMake 3.22.1 (ninja 1.10) fails with "Filename longer than 260 characters".
+  - A `subst` short drive does not help, because Node resolves it back to `C:\`.
+- **Fast build for the emulator:** in `apps/mobile/android`, with `JAVA_HOME` set to `jbr`, run `gradlew assembleDebug -PreactNativeArchitectures=x86_64` (≈3 min incremental; the first build was ≈13 min). Then `adb install -r app/build/outputs/apk/debug/app-debug.apk`, `adb reverse tcp:8081 tcp:8081`, and `npx expo start --dev-client`.
+- **Never start Metro with `CI=1`:** it turns off file watching, so code changes and new routes are ignored.
+- **Emulator on the NVIDIA GPU:**
+  - The AVD `config.ini` has `hw.gpu.mode = host`; the original is backed up as `config.ini.bak`.
+  - Windows "High performance" GPU preference (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`) is set for `emulator.exe` and `qemu-system-x86_64.exe`.
+  - The GPU does not speed up Gradle.
+- **Status (2026-10-28): slice 1 verified on the Pixel 8 API 35 emulator.**
+  - Login with `test_actor` shows "Hi Test".
+  - The session survives a force-close (SecureStore, `/auth/me` returns 200).
+  - Log out returns to Login.
+  - A wrong password shows "Invalid email or password." (the API's `field_errors.detail`).
+  - Fast refresh works.
+- **Slice 2 (done, verified on the emulator as `test_actor`, 2026-10-28):**
+  - **Home (`(tabs)/home.tsx`):**
+    - Feed order: casting calls first, then posts. Pull to refresh.
+    - `components/post-card.tsx`: author → profile, image, tap-to-play video with `expo-video` (never autoplays), like.
+    - `components/casting-card.tsx`: shows casting details and the "📍 Near you" badge.
+  - **Post (`post/[id].tsx`):** the post with its comments, plus adding a comment.
+  - **Profile (`(tabs)/profile.tsx`) and other people's profiles (`user/[id].tsx`):**
+    - Both use the shared `components/profile-view.tsx`: header, follower/following counts, About me, casting photos, posts.
+    - Your own profile has Log out.
+    - Other profiles have Follow, and Message only when connected.
+  - **Messages (`(tabs)/messages.tsx`):** conversation list that refreshes on focus, unread badges.
+  - **Chat (`chat/[id].tsx`):** checks for new messages every 5 s, sends, shows shared-post cards and "Seen". Typing is disabled when not connected.
+  - Detail screens are registered in the root `_layout.tsx`, behind the signed-in guard, with a themed header.
+- **`plugins/with-android-cmake.js`:** config plugin that re-writes `cmake.dir` on every prebuild. Prebuild deletes `local.properties` even without `--clean`.
+- **Slice 2 completion (verified on the emulator, 2026-10-28):**
+  - **Search tab:** `/users/search/`.
+  - **Composer on Home:** text plus photo or video from the system photo picker (`expo-image-picker`), posted to `/posts/`.
+    - Uploads use an `expo-file-system` `File` (`lib/config.ts` `toUpload`). Expo's global fetch rejects React Native's old `{uri, name, type}` objects with "Unsupported FormDataPart implementation".
+  - **Share sheet (`components/share-sheet.tsx`):** send to a connection in a Bharini message first, then the system share sheet with the website link. Casting-call shares bump `share_count`.
+  - **Connect button (`components/connect-button.tsx`)** on other people's profiles.
+  - **Connection requests** listed at the top of Messages, with Accept / Ignore.
+  - **Delete comment** (`can_delete`).
+  - **Unread badge** on the Messages tab (`NativeTabs.Trigger.Badge`, checks every 15 s).
+  - **Deep links** such as `bharini://post/89` open the post.
+- **Same backend as the website:** all calls go through `@bharini/api-client`. The only backend change for mobile is adding `10.0.2.2` to `ALLOWED_HOSTS`.
+- **Metro:** restart it with `--clear` after installing a package; otherwise "Unable to resolve".
+- **Slice 3 (done, verified on the emulator, 2026-10-28):** onboarding and Edit profile.
+  - **Screen:** `src/app/onboarding.tsx`, 4 steps mirroring the web onboarding.
+    - Required steps 1–3, optional portfolio.
+    - `STEP_FIELDS` maps the API's `missing_fields` to steps; the current step has a silver outline.
+    - New artists are redirected there from `(tabs)/_layout.tsx` and get no back arrow. Profile tab → "Edit profile".
+  - **Steps (`components/profile/`):**
+    - `about-step`: username check plus suggestions, discipline chips, profile photo (camera or gallery), bio, sex, date of birth, height (actors), guardian consent for under-18s.
+    - `languages-step`.
+    - `contact-step`: +91 phone, extra email with PIN, Instagram/Facebook normalisation.
+    - `portfolio-step`: casting photos (actor/choreographer) with pose outlines; per-discipline video (record with the system camera capped at the slot length, or gallery), audio (document picker) and image slots; director showreel links; certificates.
+  - **Form controls (`components/form.tsx`):**
+    - `SelectField` is an app-styled bottom sheet; the `@expo/ui` Compose dropdown looked out of place.
+    - `DateField` uses `@expo/ui/community/datetime-picker`: a native dialog on Android, inline on iOS.
+  - **Camera:**
+    - `src/app/camera.tsx` route, opened with `lib/camera.ts` `openCamera({pose, facing})` → Promise of the photo uri.
+    - `components/camera-capture.tsx`: `expo-camera` with the SVG pose overlay (`components/pose-guide.tsx`, `react-native-svg`, same paths as the web).
+    - **Volume keys take the photo**, using `react-native-volume-manager`: volume is held at 0.5 so every press registers, the system volume UI is hidden, and both are restored on close.
+    - It must be a route, not a Modal: Android only sends volume keys to the main window.
+  - **New native dependencies:** `expo-camera`, `react-native-volume-manager`, `react-native-svg`, `expo-document-picker`.
+  - **Uploads:** `lib/config.ts` `toUpload({uri})` (expo-file-system File), plus `ageFrom`, `fieldErrors`, `messageOf`.
+- **Not done:**
+  - Audio slots show "Uploaded · N sec" but have no in-app player (would need `expo-audio`).
+  - No city autocomplete list (the web has a datalist).
+  - Production-house profile editing is not in the app yet.
+  - A camera-taken casting photo is only checked against a real face on a physical device; the emulator scene has none.
+- **Slice 4: push notifications (code done, 2026-10-28; real delivery waits on account setup):**
+  - **Backend app `notifications`:**
+    - Models: `PushDevice` (Expo token, unique per phone) and `NotificationSettings` (messages, connections, follows, casting; a missing row means all on).
+    - API: `POST/DELETE /api/v1/notifications/devices/`, `GET/PATCH /api/v1/notifications/settings/`.
+    - `push.notify(users, kind, title, body, data)`: skips muted users, sends after commit on a background thread to `https://exp.host/--/api/v2/push/send` in batches of 100, and deletes `DeviceNotRegistered` tokens. Optional env `EXPO_ACCESS_TOKEN`.
+  - **Hooks:**
+    - New message → the other person.
+    - Connection request → them; accepted → the requester.
+    - New follow (first time only).
+    - Casting call → artists whose city is in the casting location (`production_posts.views.notify_local_artists`).
+  - **Tests:** `notifications/tests/test_notifications_api.py` (5) pass.
+  - **Also fixed:** production feed and comment cursor pagination now tie-break on `id`. The other developer's pagination tests were flaky, and real pages could skip or repeat posts.
+  - **App:**
+    - `src/lib/notifications.ts`: creates channel `default` before asking permission (Android 13+), gets the Expo push token with the EAS projectId and registers it; `unregisterForPush` runs on logout.
+    - `openFromNotification` routes taps: chat, profile, or home.
+    - `_layout.tsx` handles taps with `useLastNotificationResponse`.
+    - `src/app/notification-settings.tsx` has toggles, linked from Profile → 🔔 Notifications.
+  - **Verified on the emulator:** permission prompt, channel, `POST_NOTIFICATIONS` granted, settings load and save. Token registration stops with "no EAS projectId", as designed.
+  - **To finish (user accounts needed):**
+    1. `npx eas login` and `npx eas init` in `apps/mobile`. This writes `extra.eas.projectId` into `app.json`.
+    2. Create a Firebase project and an Android app with package `com.bharini.app`. Put `google-services.json` in `apps/mobile` and set `expo.android.googleServicesFile`. Upload the FCM v1 service-account key with `eas credentials`.
+    3. iOS: an APNs key through `eas credentials` (Apple Developer account).
+    4. Rebuild the APK, then send a test message to see a push.
+  - **Not built:** a web toggle UI for these settings; notifications for likes or comments; an in-app notification list.
+
 ## User preferences
 - Respond using the caveman (terse) and ponytail (smallest complete change) skills.
 - Commit only when asked. Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

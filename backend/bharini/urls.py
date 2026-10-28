@@ -35,6 +35,7 @@ urlpatterns = [
     path('api/v1/users/', include(user_urlpatterns)),
     path('api/v1/users/', include('connections.urls')),
     path('api/v1/messages/', include('messaging.urls')),
+    path('api/v1/notifications/', include('notifications.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

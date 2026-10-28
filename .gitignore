@@ -79,3 +79,18 @@ Thumbs.db
 # Local helper scripts
 start_servers.bat
 stop_servers.bat
+
+# Expo / React Native (apps/mobile)
+apps/mobile/android/
+apps/mobile/ios/
+.expo/
+.metro-health-check*
+expo-env.d.ts
+web-build/
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

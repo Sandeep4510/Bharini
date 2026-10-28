@@ -9,6 +9,7 @@ from accounts.responses import error_response, ok_response
 from artist_posts.models import Post as ArtistPost
 from artist_posts.serializers import user_summary
 from connections.models import are_connected, blocked_ids, connected_ids
+from notifications.push import notify
 from production_posts.models import Post as ProductionPost
 from profiles.serializers import absolute_url
 
@@ -190,6 +191,10 @@ class MessagesAPIView(APIView):
 
         message = Message.objects.create(conversation=conversation, sender=request.user, body=body, **shared)
         conversation.save(update_fields=['updated_at'])  # moves the chat to the top of both lists
+        notify(
+            [other], 'messages', user_summary(request, request.user)['name'],
+            body or 'Shared a post with you', {'conversation_id': conversation.id},
+        )
         return ok_response(request, message='Sent.', data=message_data(request, message), status_code=status.HTTP_201_CREATED)
 
     def invalid(self, request, field, text):

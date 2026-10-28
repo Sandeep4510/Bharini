@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Mobile: build &amp; run on Android (dev build)" type="js.build_tools.npm">
+    <package-json value="$PROJECT_DIR$/apps/mobile/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="android" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs>
+      <env name="JAVA_HOME" value="C:\Program Files\Android\Android Studio\jbr" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>

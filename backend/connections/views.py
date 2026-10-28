@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from accounts.responses import error_response, ok_response
 from artist_posts.models import Follow
 from artist_posts.serializers import user_summary
+from notifications.push import notify
 
 from .models import Block, Connection, blocked_ids, connected_ids, connection_status
 
@@ -44,6 +45,8 @@ class ConnectAPIView(APIView):
             try:
                 with transaction.atomic():
                     Connection.objects.create(from_user=request.user, to_user=other)
+                name = user_summary(request, request.user)['name']
+                notify([other], 'connections', 'New connection request', f'{name} wants to connect with you.', {'user_id': request.user.id})
             except IntegrityError:  # double click; the request already exists
                 pass
         elif link.status == Connection.Status.PENDING and link.to_user_id == request.user.id:
@@ -51,6 +54,8 @@ class ConnectAPIView(APIView):
             link.status = Connection.Status.ACCEPTED
             link.responded_at = timezone.now()
             link.save(update_fields=['status', 'responded_at'])
+            name = user_summary(request, request.user)['name']
+            notify([other], 'connections', 'Connection accepted', f'{name} accepted your request. You can message each other now.', {'user_id': request.user.id})
         return self.respond(request, other)
 
     def delete(self, request, user_id, *args, **kwargs):

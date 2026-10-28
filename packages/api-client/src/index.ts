@@ -14,6 +14,7 @@ import type {
   Conversation,
   CursorPage,
   FollowerResult,
+  NotificationSettings,
   PhotoSlot,
   Post,
   PostComment,
@@ -54,7 +55,9 @@ export class ApiClient {
 
   constructor(options: ApiClientOptions = {}) {
     const stored = readSession();
-    this.baseUrl = options.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+    // each name written out in full so Next (NEXT_PUBLIC_*) and Expo (EXPO_PUBLIC_*) inline it at build time
+    this.baseUrl =
+      options.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
     this.accessToken = options.accessToken ?? stored.accessToken ?? null;
     this.refreshToken = options.refreshToken ?? stored.refreshToken ?? null;
     this.credentials = options.credentials ?? 'include';
@@ -544,6 +547,31 @@ export class ApiClient {
     );
   }
 
+  registerPushDevice(token: string, platform: 'android' | 'ios') {
+    return this.request<AuthApiResponse<null>>('/api/v1/notifications/devices/', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform }),
+    });
+  }
+
+  unregisterPushDevice(token: string) {
+    return this.request<AuthApiResponse<null>>('/api/v1/notifications/devices/', {
+      method: 'DELETE',
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  getNotificationSettings() {
+    return this.request<AuthApiResponse<NotificationSettings>>('/api/v1/notifications/settings/');
+  }
+
+  updateNotificationSettings(changes: Partial<NotificationSettings>) {
+    return this.request<AuthApiResponse<NotificationSettings>>('/api/v1/notifications/settings/', {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    });
+  }
+
   getUnreadMessageCount() {
     return this.request<AuthApiResponse<{ unread: number }>>('/api/v1/messages/unread-count/');
   }
@@ -573,8 +601,6 @@ export class ApiClient {
   }
 }
 
-export const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000',
-});
+export const apiClient = new ApiClient();
 
 export default ApiClient;

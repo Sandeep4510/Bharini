@@ -185,6 +185,10 @@ export type Conversation = {
   can_message: boolean;
 };
 
+export type NotificationKind = 'messages' | 'connections' | 'follows' | 'casting';
+
+export type NotificationSettings = Record<NotificationKind, boolean>;
+
 export type TokenPair = {
   access: string;
   refresh: string;

@@ -5,6 +5,8 @@ from rest_framework.views import APIView
 
 from accounts.views import error_response, ok_response
 from connections.models import blocked_ids
+from notifications.push import notify
+from profiles.models import ArtistProfile
 from productions.models import ProductionProfile
 
 from .models import Post, PostComment, PostLike
@@ -13,12 +15,13 @@ from .serializers import PostCommentSerializer, PostSerializer
 
 class PostCursorPagination(CursorPagination):
     page_size = 20
-    ordering = '-created_at'
+    # id breaks ties: posts created in the same instant were otherwise skipped or repeated across pages
+    ordering = ('-created_at', '-id')
 
 
 class CommentCursorPagination(CursorPagination):
     page_size = 50
-    ordering = 'created_at'
+    ordering = ('created_at', 'id')
 
 
 def annotated_posts(user):
@@ -62,7 +65,9 @@ class PostListCreateAPIView(APIView):
         serializer = PostSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return validation_error(request, 'Please fix the highlighted fields.', serializer.errors)
-        serializer.save(production=profile)
+        post = serializer.save(production=profile)
+        if post.post_type == Post.Type.CASTING_CALL:
+            notify_local_artists(request, post)
         return ok_response(request, 'Post published.', data=serializer.data, status_code=status.HTTP_201_CREATED)
 
 
@@ -147,3 +152,20 @@ class OpportunitiesAPIView(APIView):
             for post, item in zip(posts, PostSerializer(posts, many=True, context={'request': request}).data)
         ]
         return ok_response(request, 'Opportunities.', data={'posts': data})
+
+
+def notify_local_artists(request, post):
+    """Push a new casting call to artists whose city appears in its location (same city match as the opportunities feed)."""
+    where = getattr(getattr(post, 'casting', None), 'location', '').lower()
+    if not where:
+        return
+    # shortcut: scans every artist with a location; index a city field once there are many thousands of artists
+    artists = (
+        ArtistProfile.objects.exclude(location='')
+        .filter(user__is_active=True)
+        .exclude(user_id__in=blocked_ids(request.user))
+        .select_related('user')
+    )
+    local = [profile.user for profile in artists if profile.location.split(',')[0].strip().lower() in where]
+    if local:
+        notify(local, 'casting', f'Casting call near you: {post.production.name}', post.body or 'A new role near you', {'post_id': post.id})

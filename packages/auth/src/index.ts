@@ -8,37 +8,56 @@ export const AUTH_STORAGE_KEYS = {
   refreshToken: 'bharini.refreshToken',
 } as const;
 
-export function readSession(): AuthSession {
-  if (typeof window === 'undefined') {
-    return { accessToken: null, refreshToken: null };
-  }
+/** Synchronous key/value store for tokens: localStorage on the web, SecureStore on mobile. */
+export type SessionStorage = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+};
 
+const noStorage: SessionStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+
+let custom: SessionStorage | null = null;
+
+/** React Native has no localStorage, so the app registers its own store here before the first API call. */
+export function setSessionStorage(next: SessionStorage) {
+  custom = next;
+}
+
+// resolved per call: on the server (SSR) there is no browser window, so there are no tokens
+function store(): SessionStorage {
+  if (custom) return custom;
+  return typeof window !== 'undefined' && window.localStorage ? window.localStorage : noStorage;
+}
+
+export function readSession(): AuthSession {
+  const storage = store();
   return {
-    accessToken: window.localStorage.getItem(AUTH_STORAGE_KEYS.accessToken),
-    refreshToken: window.localStorage.getItem(AUTH_STORAGE_KEYS.refreshToken),
+    // '' counts as no token: mobile blanks a key before its async delete finishes
+    accessToken: storage.getItem(AUTH_STORAGE_KEYS.accessToken) || null,
+    refreshToken: storage.getItem(AUTH_STORAGE_KEYS.refreshToken) || null,
   };
 }
 
 export function saveSession(session: Partial<AuthSession>) {
-  if (typeof window === 'undefined') return;
-
+  const storage = store();
   if (session.accessToken === null || session.accessToken === undefined) {
-    window.localStorage.removeItem(AUTH_STORAGE_KEYS.accessToken);
+    storage.removeItem(AUTH_STORAGE_KEYS.accessToken);
   } else {
-    window.localStorage.setItem(AUTH_STORAGE_KEYS.accessToken, session.accessToken);
+    storage.setItem(AUTH_STORAGE_KEYS.accessToken, session.accessToken);
   }
 
   if (session.refreshToken === null || session.refreshToken === undefined) {
-    window.localStorage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
+    storage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
   } else {
-    window.localStorage.setItem(AUTH_STORAGE_KEYS.refreshToken, session.refreshToken);
+    storage.setItem(AUTH_STORAGE_KEYS.refreshToken, session.refreshToken);
   }
 }
 
 export function clearSession() {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(AUTH_STORAGE_KEYS.accessToken);
-  window.localStorage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
+  const storage = store();
+  storage.removeItem(AUTH_STORAGE_KEYS.accessToken);
+  storage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
 }
 
 export function isAuthenticated() {
