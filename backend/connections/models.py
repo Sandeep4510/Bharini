@@ -30,6 +30,26 @@ class Connection(models.Model):
         ).first()
 
 
+class Block(models.Model):
+    """`blocker` stops seeing `blocked`. Both sides lose each other's posts, chats, profile and the connection."""
+
+    blocker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='blocks_made')
+    blocked = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='blocks_received')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['blocker', 'blocked'], name='unique_block'),
+            models.CheckConstraint(condition=~Q(blocker=models.F('blocked')), name='no_self_block'),
+        ]
+
+
+def blocked_ids(user):
+    """Ids hidden from `user`, whichever side blocked: people they blocked and people who blocked them."""
+    pairs = Block.objects.filter(Q(blocker=user) | Q(blocked=user)).values_list('blocker_id', 'blocked_id')
+    return {blocked if blocker == user.id else blocker for blocker, blocked in pairs}
+
+
 def connection_status(viewer, other):
     """none, pending_sent, pending_received or connected, from the viewer's side."""
     link = Connection.between(viewer, other)

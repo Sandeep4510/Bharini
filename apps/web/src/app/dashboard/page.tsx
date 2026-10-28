@@ -10,19 +10,12 @@ import type { ArtistProfile, ProfileOptions } from '@bharini/types';
 import { AppHeader } from '@/components/app-header';
 import { useAuth } from '@/components/auth-provider';
 import { CompletionBar } from '@/components/completion-bar';
+import { ageFrom } from '@/components/dob-input';
 import { PhotoChangeButton } from '@/components/photo-change-button';
 import { AboutWithStatsFor } from '@/components/follow-stats';
 import { PortfolioEditor } from '@/components/portfolio-editor';
 import { ErrorBanner, secondaryButton } from '@/components/profile-fields';
 import { useArtistProfile } from '@/components/use-artist-profile';
-
-function ageFrom(dateOfBirth: string | null) {
-  if (!dateOfBirth) return null;
-  const born = new Date(dateOfBirth);
-  const today = new Date();
-  const hadBirthday = today.getMonth() > born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() >= born.getDate());
-  return today.getFullYear() - born.getFullYear() - (hadBirthday ? 0 : 1);
-}
 
 function formatHeight(cm: number | null) {
   if (!cm) return null;

@@ -27,6 +27,7 @@ export type AuthContextValue = {
     role: string;
     password: string;
     password_confirm: string;
+    accept_terms: boolean;
   }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -144,6 +145,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     role: string;
     password: string;
     password_confirm: string;
+    accept_terms: boolean;
   }) => {
     const response = await apiClient.register(payload);
     const tokens = response.data?.tokens;

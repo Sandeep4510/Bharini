@@ -7,9 +7,10 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from accounts.responses import error_response, ok_response
+from artist_posts.models import Follow
 from artist_posts.serializers import user_summary
 
-from .models import Connection, connected_ids, connection_status
+from .models import Block, Connection, blocked_ids, connected_ids, connection_status
 
 User = get_user_model()
 
@@ -33,7 +34,7 @@ class ConnectAPIView(APIView):
         return ok_response(request, message='Connection updated.', data={'connection': connection_status(request.user, other)})
 
     def post(self, request, user_id, *args, **kwargs):
-        other = User.objects.filter(pk=user_id, is_active=True).first()
+        other = User.objects.filter(pk=user_id, is_active=True).exclude(pk__in=blocked_ids(request.user)).first()
         if not other:
             return not_found(request)
         if other.id == request.user.id:
@@ -60,6 +61,44 @@ class ConnectAPIView(APIView):
         if link:
             link.delete()
         return self.respond(request, other)
+
+
+class BlockAPIView(APIView):
+    """POST blocks `user_id` and drops the connection and follows between you; DELETE unblocks."""
+
+    def post(self, request, user_id, *args, **kwargs):
+        other = User.objects.filter(pk=user_id, is_active=True).first()
+        if not other:
+            return not_found(request)
+        if other.id == request.user.id:
+            return error_response(request, 'cannot_block_self', 'You cannot block yourself.', status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            Block.objects.get_or_create(blocker=request.user, blocked=other)
+            Connection.objects.filter(
+                Q(from_user=request.user, to_user=other) | Q(from_user=other, to_user=request.user)
+            ).delete()
+            Follow.objects.filter(
+                Q(follower=request.user, followee=other) | Q(follower=other, followee=request.user)
+            ).delete()
+        return ok_response(request, message='Blocked.', data={'is_blocked': True})
+
+    def delete(self, request, user_id, *args, **kwargs):
+        Block.objects.filter(blocker=request.user, blocked_id=user_id).delete()
+        return ok_response(request, message='Unblocked.', data={'is_blocked': False})
+
+
+class BlockedListAPIView(APIView):
+    """People you blocked, newest first, so you can unblock them (they no longer show up in search)."""
+
+    def get(self, request, *args, **kwargs):
+        blocks = (
+            Block.objects.filter(blocker=request.user, blocked__is_active=True)
+            .select_related('blocked__artist_profile', 'blocked__production_profile')
+            .order_by('-created_at')
+        )
+        return ok_response(request, message='Blocked accounts.', data={
+            'blocked': [user_summary(request, block.blocked) for block in blocks],
+        })
 
 
 class ConnectionRequestsAPIView(APIView):

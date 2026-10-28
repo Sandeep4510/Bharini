@@ -11,6 +11,8 @@ export const primaryButton =
   'inline-flex items-center justify-center rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50';
 export const secondaryButton =
   'inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50';
+export const dangerButton =
+  'inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Flattens DRF field errors (strings, lists or nested lists) into one message per field. */
 export function fieldErrorsFrom(error: unknown): Record<string, string> {

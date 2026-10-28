@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 
 from accounts.responses import error_response, ok_response
-from connections.models import connection_status
+from connections.models import Block, blocked_ids, connection_status
 from profiles.models import Discipline
 from profiles.serializers import ArtistProfileSerializer
 
@@ -20,8 +20,9 @@ FOLLOWER_RESULTS = 20
 
 
 def posts_for(request):
-    """Posts by active accounts, with counts and the viewer's like worked out in one query."""
-    return Post.objects.filter(author__is_active=True).select_related('author__artist_profile', 'author__production_profile').annotate(
+    """Posts by active, unblocked accounts, with counts and the viewer's like worked out in one query."""
+    visible = Post.objects.filter(author__is_active=True).exclude(author__in=blocked_ids(request.user))
+    return visible.select_related('author__artist_profile', 'author__production_profile').annotate(
         like_count=Count('likes', distinct=True),
         comment_count=Count('comments', distinct=True),
         liked=Exists(PostLike.objects.filter(post=OuterRef('pk'), user=request.user)),
@@ -135,7 +136,9 @@ class PostCommentsAPIView(APIView):
         if not post:
             return not_found(request)
         # shortcut: oldest COMMENT_LIMIT only; page them once posts get busy
-        comments = post.comments.select_related('author__artist_profile', 'author__production_profile', 'post')[:COMMENT_LIMIT]
+        comments = post.comments.exclude(author__in=blocked_ids(request.user)).select_related(
+            'author__artist_profile', 'author__production_profile', 'post',
+        )[:COMMENT_LIMIT]
         serializer = CommentSerializer(comments, many=True, context={'request': request})
         return ok_response(request, message='Comments.', data={'comments': serializer.data})
 
@@ -167,8 +170,10 @@ class UserProfileAPIView(APIView):
 
     def get(self, request, user_id, *args, **kwargs):
         user = User.objects.filter(pk=user_id, is_active=True).select_related('artist_profile', 'production_profile').first()
-        if not user:
+        # someone who blocked you looks like a missing profile; someone you blocked shows only who they are
+        if not user or Block.objects.filter(blocker=user, blocked=request.user).exists():
             return not_found(request, 'Profile')
+        is_blocked = Block.objects.filter(blocker=request.user, blocked=user).exists()
         profile = getattr(user, 'artist_profile', None)
         posts = posts_for(request).filter(author=user).order_by('-created_at')[:PROFILE_POSTS]
         return ok_response(request, message='Profile.', data={
@@ -181,8 +186,9 @@ class UserProfileAPIView(APIView):
             'is_following': user.followers.filter(follower=request.user).exists(),
             'is_me': user.id == request.user.id,
             'connection': 'none' if user.id == request.user.id else connection_status(request.user, user),
+            'is_blocked': is_blocked,
             'posts': PostSerializer(posts, many=True, context={'request': request}).data,
-            'portfolio': public_portfolio(request, profile) if profile else None,
+            'portfolio': public_portfolio(request, profile) if profile and not is_blocked else None,
         })
 
 
@@ -237,7 +243,7 @@ class FollowAPIView(APIView):
         })
 
     def post(self, request, user_id, *args, **kwargs):
-        user = User.objects.filter(pk=user_id, is_active=True).first()
+        user = User.objects.filter(pk=user_id, is_active=True).exclude(pk__in=blocked_ids(request.user)).first()
         if not user:
             return not_found(request, 'Profile')
         if user.id == request.user.id:
@@ -264,7 +270,9 @@ class UserSearchAPIView(APIView):
         query = request.query_params.get('q', '').strip()
         if not query:
             return ok_response(request, message='People.', data={'results': []})
-        people = matching_name(User.objects.filter(is_active=True).exclude(pk=request.user.pk), query)
+        people = matching_name(
+            User.objects.filter(is_active=True).exclude(pk=request.user.pk).exclude(pk__in=blocked_ids(request.user)), query,
+        )
         people = people.select_related('artist_profile', 'production_profile').order_by('first_name', 'last_name', 'id')
         return ok_response(request, message='People.', data={
             'results': [user_summary(request, person) for person in people.distinct()[:SEARCH_RESULTS]],

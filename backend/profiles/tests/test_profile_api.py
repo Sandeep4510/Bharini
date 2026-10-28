@@ -401,6 +401,21 @@ class ProfileValidationTests(ArtistTestBase):
         response = self.client.patch('/api/v1/profile/', {'date_of_birth': '1899-12-31'}, format='json')
         self.assertEqual(response.status_code, 400)
 
+    def test_minors_need_guardian_consent(self, check_face_mock):
+        fifteen = (timezone.localdate() - timedelta(days=15 * 365)).isoformat()  # about 14, never 15 on a leap day
+        response = self.client.patch('/api/v1/profile/', {'date_of_birth': fifteen}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(set(response.data['field_errors']), {'guardian_name', 'guardian_consent'})
+
+        payload = {'date_of_birth': fifteen, 'guardian_name': ' Lata Rao ', 'guardian_consent': True}
+        response = self.client.patch('/api/v1/profile/', payload, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['data']['guardian_name'], 'Lata Rao')
+        self.assertIsNotNone(response.data['data']['guardian_consent_at'])
+        # consent given once covers later saves; adults need none
+        self.assertEqual(self.client.patch('/api/v1/profile/', {'date_of_birth': fifteen}, format='json').status_code, 200)
+        self.assertEqual(self.client.patch('/api/v1/profile/', {'date_of_birth': '1998-04-12'}, format='json').status_code, 200)
+
     def test_valid_social_and_showreel_links_are_saved(self, check_face_mock):
         response = self.client.patch('/api/v1/profile/', {
             'instagram_url': 'https://www.instagram.com/asha',

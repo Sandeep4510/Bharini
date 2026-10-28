@@ -12,6 +12,11 @@ from .models import LANGUAGES, PHOTO_SLOTS, USERNAME_PATTERN, ArtistProfile, Dis
 from .slots import SHOWREEL_LINK_LIMIT, SLOTS
 
 SHOWREEL_HOSTS = ('youtube.com', 'youtu.be', 'vimeo.com', 'drive.google.com')
+ADULT_AGE = 18  # DPDP Act 2023 treats anyone under 18 as a child
+
+
+def age_on(born, today):
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
 def host_matches(url, hosts):
@@ -94,6 +99,7 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
     missing_fields = serializers.ListField(read_only=True)
     onboarding_complete = serializers.BooleanField(read_only=True)
     completion_percent = serializers.IntegerField(read_only=True)
+    guardian_consent = serializers.BooleanField(write_only=True, required=False)
 
     class Meta:
         model = ArtistProfile
@@ -104,6 +110,9 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             'bio',
             'gender',
             'date_of_birth',
+            'guardian_name',
+            'guardian_consent',
+            'guardian_consent_at',
             'height_cm',
             'location',
             'phone',
@@ -120,11 +129,27 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             'onboarding_complete',
             'completion_percent',
         )
+        read_only_fields = ('guardian_consent_at',)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['profile_photo'] = absolute_url(self.context.get('request'), instance.profile_photo)
         return data
+
+    def validate(self, attrs):
+        born = attrs.get('date_of_birth')
+        if born and age_on(born, timezone.localdate()) < ADULT_AGE:
+            name = attrs.get('guardian_name', self.instance.guardian_name if self.instance else '').strip()
+            consented = attrs.get('guardian_consent') or bool(self.instance and self.instance.guardian_consent_at)
+            errors = {}
+            if not name:
+                errors['guardian_name'] = ["Under 18: enter your parent or guardian's full name."]
+            if not consented:
+                errors['guardian_consent'] = ['Under 18: your parent or guardian must give consent.']
+            if errors:
+                raise serializers.ValidationError(errors)
+            attrs['guardian_name'] = name
+        return attrs
 
     def get_alt_email_verified(self, obj):
         return obj.alt_email_verified_at is not None
@@ -200,6 +225,8 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
+        if validated_data.pop('guardian_consent', False):
+            instance.guardian_consent_at = timezone.now()
         old_photo = instance.profile_photo.name if 'profile_photo' in validated_data else None
         new_alt_email = validated_data.get('alt_email')
         if new_alt_email is not None and new_alt_email.lower() != instance.alt_email.lower():

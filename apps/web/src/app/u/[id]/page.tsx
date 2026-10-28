@@ -9,6 +9,7 @@ import { readSession } from '@bharini/auth';
 import type { PublicProfile } from '@bharini/types';
 
 import { AppHeader } from '@/components/app-header';
+import { BlockButton } from '@/components/block-button';
 import { ConnectButton } from '@/components/connect-button';
 import { AboutWithStats } from '@/components/follow-stats';
 import { Avatar, PostCard, replacePost } from '@/components/artist-post-card';
@@ -23,6 +24,7 @@ function UserProfilePageContent() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!readSession().accessToken) {
@@ -46,7 +48,7 @@ function UserProfilePageContent() {
     return () => {
       cancelled = true;
     };
-  }, [id, router]);
+  }, [id, router, reloadKey]);
 
   const toggleFollow = async () => {
     if (!profile) return;
@@ -86,23 +88,34 @@ function UserProfilePageContent() {
               </div>
               {profile.is_me ? null : (
                 <div className="flex flex-wrap gap-2 self-start">
-                <ConnectButton userId={profile.id} status={profile.connection} onChange={(connection) => setProfile({ ...profile, connection })} />
-                {profile.connection === 'connected' ? (
-                  <Link href={`/messages?with=${profile.id}`} className={secondaryButton}>
-                    Message
-                  </Link>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void toggleFollow()}
-                  className={`${profile.is_following ? secondaryButton : primaryButton} self-start`}
-                >
-                  {profile.is_following ? 'Following' : 'Follow'}
-                </button>
+                {profile.is_blocked ? null : (
+                  <>
+                    <ConnectButton userId={profile.id} status={profile.connection} onChange={(connection) => setProfile({ ...profile, connection })} />
+                    {profile.connection === 'connected' ? (
+                      <Link href={`/messages?with=${profile.id}`} className={secondaryButton}>
+                        Message
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void toggleFollow()}
+                      className={`${profile.is_following ? secondaryButton : primaryButton} self-start`}
+                    >
+                      {profile.is_following ? 'Following' : 'Follow'}
+                    </button>
+                  </>
+                )}
+                <BlockButton userId={profile.id} name={profile.name} blocked={profile.is_blocked} onChange={() => setReloadKey((key) => key + 1)} />
                 </div>
               )}
             </section>
+
+            {profile.is_blocked ? (
+              <p className="rounded-2xl border border-slate-700 bg-slate-900/70 px-6 py-4 text-sm text-slate-300">
+                You blocked {profile.name}. Their posts and messages are hidden from you.
+              </p>
+            ) : null}
 
             <AboutWithStats
               userId={profile.id}

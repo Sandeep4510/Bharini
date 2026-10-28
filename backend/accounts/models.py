@@ -24,6 +24,9 @@ class User(AbstractUser):
     # False only for Google sign-ups that started without a role; they pick one before using the app
     role_confirmed = models.BooleanField(default=True)
     email_verified_at = models.DateTimeField(null=True, blank=True)
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    # set (with is_active=False) when the user deletes the account; purge_deleted_accounts removes it after the grace period
+    deletion_requested_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['first_name', 'last_name']

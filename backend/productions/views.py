@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.responses import error_response, ok_response, request_id
+from connections.models import Block
 
 from .models import ProductionProfile
 from .serializers import ProductionSerializer
@@ -56,8 +57,9 @@ class ProductionCreateAPIView(APIView):
 
 class ProductionDetailAPIView(APIView):
     def get(self, request, pk):
-        profile = production_queryset().filter(pk=pk).first()
-        if profile is None:
+        profile = production_queryset().filter(pk=pk, owner__is_active=True).first()
+        # an owner who blocked you looks like a missing profile
+        if profile is None or Block.objects.filter(blocker=profile.owner_id, blocked=request.user).exists():
             return not_found(request)
         data = ProductionSerializer(profile, context={'request': request}).data
         return ok_response(request, 'Production profile fetched.', data=data)

@@ -19,6 +19,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError, UntypedToken
 
+from .deletion import DELETION_GRACE, request_deletion, restorable, restore, restore_token_generator, send_restore_link
 from .mail import send_mail_in_background
 from .models import RefreshSession
 from .responses import error_response, ok_response
@@ -163,6 +164,10 @@ class LoginAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = LoginSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
+            deleted = restorable(User.objects.filter(email__iexact=str(request.data.get('email', '')))).first()
+            if deleted and deleted.check_password(str(request.data.get('password', ''))):
+                send_restore_link(deleted)
+                return pending_deletion_response(request, deleted)
             return error_response(
                 request,
                 code='invalid_credentials',
@@ -172,6 +177,15 @@ class LoginAPIView(APIView):
             )
 
         return login_response(request, serializer.validated_data['user'])
+
+
+def pending_deletion_response(request, user):
+    return error_response(
+        request,
+        code='account_pending_deletion',
+        message=f'This account is scheduled for deletion. We emailed a link to {user.email}: open it to restore your account.',
+        status_code=status.HTTP_403_FORBIDDEN,
+    )
 
 
 def login_response(request, user):
@@ -461,6 +475,43 @@ class MeAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         return ok_response(request, message='Current user profile.', data=UserSerializer(request.user).data)
+
+    def delete(self, request, *args, **kwargs):
+        request_deletion(request.user)
+        response = ok_response(
+            request,
+            message=(
+                f'Your account is deactivated. You can restore it within {DELETION_GRACE.days} days by logging in '
+                'and confirming the link we email you. After that, all your account details, including connections, '
+                'posts and messages, are deleted forever.'
+            ),
+        )
+        clear_refresh_cookie(response)
+        return response
+
+
+class RestoreAccountAPIView(APIView):
+    """The emailed link from a login attempt on a deleted account: undo the deletion and sign in."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_verify'
+
+    def post(self, request, *args, **kwargs):
+        try:
+            user_id = force_str(urlsafe_base64_decode(str(request.data.get('uid', ''))))
+            user = restorable(User.objects.all()).filter(pk=user_id).first()
+        except (TypeError, ValueError, OverflowError):
+            user = None
+        if not user or not restore_token_generator.check_token(user, str(request.data.get('token', ''))):
+            return error_response(
+                request,
+                code='invalid_restore_link',
+                message='This restore link is invalid or has expired. Log in again to get a new one.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        restore(user)
+        return login_response(request, user)
 
 
 class SessionListAPIView(APIView):

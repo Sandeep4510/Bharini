@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
@@ -17,10 +18,11 @@ User = get_user_model()
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True, min_length=8)
+    accept_terms = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = User
-        fields = ('email', 'first_name', 'last_name', 'role', 'password', 'password_confirm')
+        fields = ('email', 'first_name', 'last_name', 'role', 'password', 'password_confirm', 'accept_terms')
         extra_kwargs = {
             'email': {'required': True},
             'first_name': {'required': True},
@@ -38,6 +40,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Choose Artist or Production House.')
         return value
 
+    def validate_accept_terms(self, value):
+        if not value:
+            raise serializers.ValidationError('Accept the Terms & Conditions to create an account.')
+        return value
+
     def validate(self, attrs):
         if attrs.get('password') != attrs.get('password_confirm'):
             raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
@@ -49,8 +56,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password_confirm', None)
+        validated_data.pop('accept_terms')
         password = validated_data.pop('password')
-        return User.objects.create_user(password=password, **validated_data)
+        return User.objects.create_user(password=password, terms_accepted_at=timezone.now(), **validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):

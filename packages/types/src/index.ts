@@ -48,6 +48,8 @@ export type ArtistProfile = {
   bio: string;
   gender: Gender | '';
   date_of_birth: string | null;
+  guardian_name: string;
+  guardian_consent_at: string | null;
   height_cm: number | null;
   location: string;
   phone: string;
@@ -141,6 +143,7 @@ export type PublicProfile = UserSummary & {
   is_following: boolean;
   is_me: boolean;
   connection: ConnectionStatus;
+  is_blocked: boolean;
   posts: ArtistPost[];
   portfolio: {
     photos: Record<PhotoSlot, string | null> | null;
@@ -223,6 +226,7 @@ export type Production = ProductionSummary & {
   following_count: number;
   is_following: boolean;
   connection: ConnectionStatus;
+  is_blocked: boolean;
 };
 
 export type CastingCallDetails = {

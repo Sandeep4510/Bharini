@@ -150,6 +150,13 @@ export function SocialButtons({ role }: { role?: string }) {
       <a href={apiClient.socialLoginUrl("google", role)} className={socialButton}>
         <span className="font-bold text-sky-300">G</span> Continue with Google
       </a>
+      <p className="text-center text-xs text-slate-400">
+        By continuing with Google, you agree to the{" "}
+        <Link href="/terms" target="_blank" className="text-violet-300 hover:text-violet-200">
+          Terms &amp; Conditions
+        </Link>
+        .
+      </p>
     </div>
   );
 }

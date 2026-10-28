@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@bharini/api-client';
 import type { Production } from '@bharini/types';
 
+import { BlockButton } from '@/components/block-button';
 import { ConnectButton } from '@/components/connect-button';
 import { FollowStats } from '@/components/follow-stats';
 import { primaryButton, secondaryButton } from '@/components/profile-fields';
@@ -28,7 +29,7 @@ export function ProductionProfileView({ productionId }: { productionId: number }
     return () => {
       active = false;
     };
-  }, [productionId]);
+  }, [productionId, refreshKey]);
 
   const loadPage = useCallback(
     (cursor: string | null) =>
@@ -99,27 +100,43 @@ export function ProductionProfileView({ productionId }: { productionId: number }
 
         {production.is_owner ? null : (
           <div className="flex flex-wrap gap-2 self-start">
-            <ConnectButton
+            {production.is_blocked ? null : (
+              <>
+                <ConnectButton
+                  userId={production.owner_id}
+                  status={production.connection}
+                  onChange={(connection) => setProduction({ ...production, connection })}
+                />
+                {production.connection === 'connected' ? (
+                  <Link href={`/messages?with=${production.owner_id}`} className={secondaryButton}>
+                    Message
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={followBusy}
+                  onClick={() => void toggleFollow()}
+                  className={production.is_following ? secondaryButton : primaryButton}
+                >
+                  {production.is_following ? 'Following' : 'Follow'}
+                </button>
+              </>
+            )}
+            <BlockButton
               userId={production.owner_id}
-              status={production.connection}
-              onChange={(connection) => setProduction({ ...production, connection })}
+              name={production.name}
+              blocked={production.is_blocked}
+              onChange={() => setRefreshKey((key) => key + 1)}
             />
-            {production.connection === 'connected' ? (
-              <Link href={`/messages?with=${production.owner_id}`} className={secondaryButton}>
-                Message
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              disabled={followBusy}
-              onClick={() => void toggleFollow()}
-              className={production.is_following ? secondaryButton : primaryButton}
-            >
-              {production.is_following ? 'Following' : 'Follow'}
-            </button>
           </div>
         )}
       </section>
+
+      {production.is_blocked ? (
+        <p className="rounded-2xl border border-slate-700 bg-slate-900/70 px-6 py-4 text-sm text-slate-300">
+          You blocked {production.name}. Their posts and messages are hidden from you.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">

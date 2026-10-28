@@ -73,6 +73,11 @@ export function AppHeader({ greet = false }: { greet?: boolean }) {
             My Profile
           </Link>
         ) : null}
+        {user ? (
+          <Link href="/settings" className="text-slate-300 hover:text-white">
+            Settings
+          </Link>
+        ) : null}
         <button type="button" onClick={() => void handleLogout()} className={secondaryButton}>
           Logout
         </button>

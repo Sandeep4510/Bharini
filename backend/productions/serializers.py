@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 import re
 
-from connections.models import connection_status
+from connections.models import Block, connection_status
 from profiles.models import USERNAME_PATTERN
 from profiles.serializers import username_taken
 
@@ -35,13 +35,14 @@ class ProductionSerializer(serializers.ModelSerializer):
     following_count = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
     connection = serializers.SerializerMethodField()
+    is_blocked = serializers.SerializerMethodField()
     username = serializers.CharField(max_length=30, required=False)
 
     class Meta:
         model = ProductionProfile
         fields = [
             'id', 'kind', 'name', 'username', 'profile_picture', 'title_credits', 'is_owner', 'created_at',
-            'owner_id', 'follower_count', 'following_count', 'is_following', 'connection',
+            'owner_id', 'follower_count', 'following_count', 'is_following', 'connection', 'is_blocked',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -74,3 +75,6 @@ class ProductionSerializer(serializers.ModelSerializer):
     def get_connection(self, obj):
         viewer = self.context['request'].user
         return 'none' if obj.owner_id == viewer.id else connection_status(viewer, obj.owner)
+
+    def get_is_blocked(self, obj):
+        return Block.objects.filter(blocker=self.context['request'].user, blocked=obj.owner_id).exists()

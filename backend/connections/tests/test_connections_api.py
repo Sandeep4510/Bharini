@@ -117,3 +117,48 @@ class ConnectionEdgeTests(TestCase):
         self.assertEqual(names('mia rao'), ['Mia Rao'])
         self.assertEqual(names('rao'), ['Mia Rao'])  # ravi K does not match "rao"
         self.assertEqual(names('mia ravi'), [])
+
+
+class BlockTests(TestCase):
+    def setUp(self):
+        self.asha = User.objects.create_user(email='asha@example.com', first_name='Asha', last_name='Rao', password='StrongPass123!')
+        self.ravi = User.objects.create_user(email='ravi@example.com', first_name='Ravi', last_name='K', password='StrongPass123!')
+        self.asha_client, self.ravi_client = APIClient(), APIClient()
+        self.asha_client.force_authenticate(self.asha)
+        self.ravi_client.force_authenticate(self.ravi)
+
+    def test_block_hides_posts_chats_and_profile_both_ways(self):
+        asha, ravi = self.asha_client, self.ravi_client
+        asha.post(f'/api/v1/users/{self.ravi.id}/connect/')
+        ravi.post(f'/api/v1/users/{self.asha.id}/connect/')
+        asha.post(f'/api/v1/users/{self.ravi.id}/follow/')
+        ravi.post('/api/v1/posts/', {'body': 'ravi post'})
+        conversation = asha.post('/api/v1/messages/conversations/', {'user_id': self.ravi.id}, format='json').data['data']
+        ravi.post(f'/api/v1/messages/conversations/{conversation["id"]}/messages/', {'body': 'hi'}, format='json')
+        self.assertEqual(asha.get('/api/v1/messages/unread-count/').data['data']['unread'], 1)
+
+        self.assertEqual(asha.post(f'/api/v1/users/{self.ravi.id}/block/').data['data']['is_blocked'], True)
+
+        bodies = lambda client: [post['body'] for post in client.get('/api/v1/posts/').data['data']['posts']]
+        self.assertNotIn('ravi post', bodies(asha))
+        self.assertEqual(asha.get('/api/v1/messages/conversations/').data['data']['conversations'], [])
+        self.assertEqual(asha.get('/api/v1/messages/unread-count/').data['data']['unread'], 0)
+        self.assertEqual(asha.get(f'/api/v1/messages/conversations/{conversation["id"]}/messages/').status_code, 404)
+        self.assertEqual(ravi.get('/api/v1/messages/conversations/').data['data']['conversations'], [])
+        self.assertEqual(asha.get('/api/v1/users/search/', {'q': 'ravi'}).data['data']['results'], [])
+
+        # the blocker sees who they blocked (to unblock); the blocked person sees nothing
+        profile = asha.get(f'/api/v1/users/{self.ravi.id}/').data['data']
+        self.assertEqual((profile['is_blocked'], profile['connection'], profile['is_following'], profile['posts']), (True, 'none', False, []))
+        self.assertEqual(ravi.get(f'/api/v1/users/{self.asha.id}/').status_code, 404)
+        self.assertEqual(ravi.post(f'/api/v1/users/{self.asha.id}/connect/').status_code, 404)
+        self.assertEqual(ravi.post('/api/v1/messages/conversations/', {'user_id': self.asha.id}, format='json').status_code, 404)
+        self.assertEqual([p['name'] for p in asha.get('/api/v1/users/me/blocked/').data['data']['blocked']], ['Ravi K'])
+
+        self.assertEqual(asha.delete(f'/api/v1/users/{self.ravi.id}/block/').data['data']['is_blocked'], False)
+        self.assertIn('ravi post', bodies(asha))
+        self.assertEqual(asha.get('/api/v1/users/me/blocked/').data['data']['blocked'], [])
+
+    def test_cannot_block_self(self):
+        self.assertEqual(self.asha_client.post(f'/api/v1/users/{self.asha.id}/block/').status_code, 400)
+        self.assertEqual(self.asha_client.post('/api/v1/users/999999/block/').status_code, 404)

@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from accounts.responses import error_response, ok_response
 from artist_posts.models import Post as ArtistPost
 from artist_posts.serializers import user_summary
-from connections.models import are_connected, connected_ids
+from connections.models import are_connected, blocked_ids, connected_ids
 from production_posts.models import Post as ProductionPost
 from profiles.serializers import absolute_url
 
@@ -66,7 +66,11 @@ def as_id(value):
 
 
 def mine(request):
-    return Conversation.objects.filter(Q(user_a=request.user) | Q(user_b=request.user))
+    """The viewer's chats, minus any with someone blocked either way (the viewer is never in their own blocked set)."""
+    hidden = blocked_ids(request.user)
+    return Conversation.objects.filter(Q(user_a=request.user) | Q(user_b=request.user)).exclude(
+        Q(user_a__in=hidden) | Q(user_b__in=hidden),
+    )
 
 
 def conversation_data(request, conversation, last=None, unread=0, connected=None):
@@ -110,7 +114,9 @@ class ConversationListAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         """Open (or reuse) the chat with `user_id`."""
-        other = User.objects.filter(pk=as_id(request.data.get('user_id')), is_active=True).first()
+        other = User.objects.filter(pk=as_id(request.data.get('user_id')), is_active=True).exclude(
+            pk__in=blocked_ids(request.user),
+        ).first()
         if not other:
             return error_response(request, 'not_found', 'Profile not found.', status.HTTP_404_NOT_FOUND)
         if other.id == request.user.id:

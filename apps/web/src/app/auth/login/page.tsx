@@ -17,7 +17,9 @@ function SocialError() {
         ? 'Social sign-in was cancelled.'
         : error === 'not_configured'
           ? 'This sign-in option is not set up yet. Please use your email.'
-          : 'Social sign-in failed. Please try again or use your email.'}
+          : error === 'pending_deletion'
+            ? 'This account is scheduled for deletion. We emailed you a link: open it to restore your account.'
+            : 'Social sign-in failed. Please try again or use your email.'}
     </div>
   );
 }

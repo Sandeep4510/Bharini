@@ -8,6 +8,14 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 100 }, (_, i) => THIS_YEAR - i);
 
+export function ageFrom(dateOfBirth: string | null) {
+  if (!dateOfBirth) return null;
+  const born = new Date(dateOfBirth);
+  const today = new Date();
+  const hadBirthday = today.getMonth() > born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() >= born.getDate());
+  return today.getFullYear() - born.getFullYear() - (hadBirthday ? 0 : 1);
+}
+
 function daysIn(month: string, year: string) {
   // day 0 of the next month is the last day of this one; leap years count when the year is known
   return month ? new Date(Number(year || 2000), Number(month), 0).getDate() : 31;

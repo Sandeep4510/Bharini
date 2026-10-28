@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -33,6 +34,7 @@ export default function RegisterPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) clientErrors.email = 'Enter a valid email address, like you@example.com.';
     if (unmet.length) clientErrors.password = `Password needs: ${unmet.join(', ')}.`;
     if (password !== confirmPassword) clientErrors.password_confirm = 'Passwords do not match.';
+    if (!acceptTerms) clientErrors.accept_terms = 'Accept the Terms & Conditions to create an account.';
     setFieldErrors(clientErrors);
     if (Object.keys(clientErrors).length) {
       setError('Please fix the highlighted fields.');
@@ -49,6 +51,7 @@ export default function RegisterPage() {
         role,
         password,
         password_confirm: confirmPassword,
+        accept_terms: acceptTerms,
       });
 
       router.push('/auth/verify-email');
@@ -96,6 +99,26 @@ export default function RegisterPage() {
         <PasswordChecklist password={password} />
         <AuthInput label="Confirm password" type={showPassword ? 'text' : 'password'} placeholder="Repeat your password" value={confirmPassword} onChange={setConfirmPassword} error={fieldErrors.password_confirm} />
         <ShowPasswordToggle checked={showPassword} onChange={setShowPassword} />
+
+        <div>
+          <label className="flex items-start gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={acceptTerms}
+              onChange={(event) => setAcceptTerms(event.target.checked)}
+              aria-invalid={fieldErrors.accept_terms ? true : undefined}
+              className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950"
+            />
+            <span>
+              I agree to the{' '}
+              <Link href="/terms" target="_blank" className="font-medium text-violet-300 hover:text-violet-200">
+                Terms &amp; Conditions
+              </Link>
+              . If I am under 18, my parent or guardian agrees too.
+            </span>
+          </label>
+          {fieldErrors.accept_terms ? <span className="mt-1.5 block text-sm text-red-300">{fieldErrors.accept_terms}</span> : null}
+        </div>
 
         <AuthButton>{isSubmitting ? 'Creating account...' : 'Create account'}</AuthButton>
         <SocialButtons role={role} />

@@ -85,6 +85,9 @@ class ArtistProfile(models.Model):
     bio = models.TextField('about yourself', max_length=1000, blank=True)
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+    # DPDP Act 2023: under-18s need a parent or lawful guardian's consent; under-16 accounts are run by that guardian
+    guardian_name = models.CharField(max_length=150, blank=True)
+    guardian_consent_at = models.DateTimeField(null=True, blank=True)
     height_cm = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MinValueValidator(50), MaxValueValidator(250)],
     )

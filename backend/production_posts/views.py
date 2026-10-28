@@ -4,6 +4,7 @@ from rest_framework.pagination import CursorPagination
 from rest_framework.views import APIView
 
 from accounts.views import error_response, ok_response
+from connections.models import blocked_ids
 from productions.models import ProductionProfile
 
 from .models import Post, PostComment, PostLike
@@ -22,7 +23,9 @@ class CommentCursorPagination(CursorPagination):
 
 def annotated_posts(user):
     return (
-        Post.objects.select_related('production', 'casting')
+        Post.objects.filter(production__owner__is_active=True)
+        .exclude(production__owner__in=blocked_ids(user))
+        .select_related('production', 'casting')
         .annotate(
             like_count=Count('likes', distinct=True),
             comment_count=Count('comments', distinct=True),
@@ -102,7 +105,9 @@ class PostCommentListCreateAPIView(APIView):
             return not_found(request)
         paginator = CommentCursorPagination()
         page = paginator.paginate_queryset(
-            PostComment.objects.select_related('author').filter(post_id=pk), request, view=None,
+            PostComment.objects.select_related('author').filter(post_id=pk).exclude(author__in=blocked_ids(request.user)),
+            request,
+            view=None,
         )
         data = PostCommentSerializer(page, many=True).data
         return ok_response(request, 'Comments fetched.', data=paginator.get_paginated_response(data).data)

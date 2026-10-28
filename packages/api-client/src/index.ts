@@ -97,6 +97,7 @@ export class ApiClient {
       path.includes('/auth/refresh/') ||
       path.includes('/auth/verify-email/') ||
       path.includes('/auth/password/reset/') ||
+      path.includes('/auth/restore/') ||
       path.includes('/auth/social/')
     );
   }
@@ -174,6 +175,7 @@ export class ApiClient {
     role: string;
     password: string;
     password_confirm: string;
+    accept_terms: boolean;
   }) {
     return this.request<AuthApiResponse<{ user: AuthUser; tokens: TokenPair }>>('/api/v1/auth/register/', {
       method: 'POST',
@@ -211,6 +213,18 @@ export class ApiClient {
 
   me() {
     return this.request<AuthApiResponse<AuthUser>>('/api/v1/auth/me/');
+  }
+
+  /** Deactivates now; restorable for 90 days via an emailed link, then deleted forever. */
+  deleteAccount() {
+    return this.request<AuthApiResponse<null>>('/api/v1/auth/me/', { method: 'DELETE' });
+  }
+
+  restoreAccount(payload: { uid: string; token: string }) {
+    return this.request<AuthApiResponse<{ user: AuthUser; tokens: TokenPair }>>('/api/v1/auth/restore/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   verifyEmail(payload: { uid: string; token: string }) {
@@ -508,6 +522,16 @@ export class ApiClient {
     return this.request<AuthApiResponse<{ connection: ConnectionStatus }>>(`/api/v1/users/${userId}/connect/`, {
       method: connect ? 'POST' : 'DELETE',
     });
+  }
+
+  setBlocked(userId: number, blocked: boolean) {
+    return this.request<AuthApiResponse<{ is_blocked: boolean }>>(`/api/v1/users/${userId}/block/`, {
+      method: blocked ? 'POST' : 'DELETE',
+    });
+  }
+
+  getBlockedUsers() {
+    return this.request<AuthApiResponse<{ blocked: UserSummary[] }>>('/api/v1/users/me/blocked/');
   }
 
   getConnectionRequests() {

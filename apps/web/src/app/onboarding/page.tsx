@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- previews are local object URLs or API-hosted uploads */
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
@@ -11,7 +12,7 @@ import { useAuth } from '@/components/auth-provider';
 import { AuthInput } from '@/components/auth-shell';
 import { CompletionBar } from '@/components/completion-bar';
 import { DisciplinePicker } from '@/components/discipline-picker';
-import { DateOfBirthInput } from '@/components/dob-input';
+import { DateOfBirthInput, ageFrom } from '@/components/dob-input';
 import { HeightInput } from '@/components/height-input';
 import { AppHeader } from '@/components/app-header';
 import { PortfolioEditor } from '@/components/portfolio-editor';
@@ -78,7 +79,11 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
   const [gender, setGender] = useState<string>(profile.gender);
   const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth ?? '');
   const [heightCm, setHeightCm] = useState(profile.height_cm);
+  const [guardianName, setGuardianName] = useState(profile.guardian_name);
+  const [guardianConsent, setGuardianConsent] = useState(Boolean(profile.guardian_consent_at));
   const isActor = disciplines.includes('actor');
+  const age = ageFrom(dateOfBirth || null);
+  const isMinor = age !== null && age < 18; // DPDP Act 2023: under 18 needs a parent or guardian's consent
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -101,6 +106,8 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
     if (!gender) clientErrors.gender = 'Choose one.';
     if (!dateOfBirth) clientErrors.date_of_birth = 'Enter your date of birth.';
     if (isActor && !heightCm) clientErrors.height_cm = 'Enter your height.';
+    if (isMinor && !guardianName.trim()) clientErrors.guardian_name = "Enter your parent or guardian's full name.";
+    if (isMinor && !guardianConsent) clientErrors.guardian_consent = 'Your parent or guardian must give consent.';
     return clientErrors;
   };
   const check = (field: string) => setErrors((previous) => ({ ...previous, [field]: validate()[field] ?? '' }));
@@ -120,6 +127,10 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
     body.append('gender', gender);
     body.append('date_of_birth', dateOfBirth);
     if (isActor && heightCm) body.append('height_cm', String(heightCm));
+    if (isMinor) {
+      body.append('guardian_name', guardianName.trim());
+      body.append('guardian_consent', String(guardianConsent));
+    }
 
     setBusy(true);
     try {
@@ -172,6 +183,40 @@ function AboutStep({ profile, options, onProfile, onNext }: StepProps) {
           <DateOfBirthInput value={dateOfBirth} onChange={setDateOfBirth} error={errors.date_of_birth} />
         </div>
       </div>
+      {isMinor ? (
+        <div className="space-y-3 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4">
+          <p className="text-sm text-amber-100">
+            {age !== null && age < 16
+              ? 'You are under 16, so this account must be created and managed by your parent or legal guardian.'
+              : 'You are under 18, so you need your parent or legal guardian’s consent and guidance to use Bharini.'}{' '}
+            See the{' '}
+            <Link href="/terms#minors" target="_blank" className="font-medium text-violet-300 hover:text-violet-200">
+              Terms &amp; Conditions
+            </Link>
+            .
+          </p>
+          <AuthInput
+            label="Parent or guardian's full name"
+            placeholder="Full name"
+            value={guardianName}
+            onChange={setGuardianName}
+            error={errors.guardian_name}
+          />
+          <div>
+            <label className="flex items-start gap-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={guardianConsent}
+                onChange={(event) => setGuardianConsent(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950"
+              />
+              I am this artist&apos;s parent or legal guardian. I have read the Terms &amp; Conditions, I consent to Bharini
+              processing their personal data, and I will supervise their use of the account.
+            </label>
+            {errors.guardian_consent ? <span className="mt-1.5 block text-sm text-red-300">{errors.guardian_consent}</span> : null}
+          </div>
+        </div>
+      ) : null}
       {isActor ? (
         <div onBlur={onLeave(() => check('height_cm'))}>
           <HeightInput value={heightCm} onChange={setHeightCm} error={errors.height_cm} />

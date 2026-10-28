@@ -41,11 +41,13 @@ class AuthApiTests(TestCase):
                 'role': 'artist',
                 'password': self.password,
                 'password_confirm': self.password,
+                'accept_terms': True,
             },
             format='json',
         )
 
         self.assertEqual(response.status_code, 201)
+        self.assertIsNotNone(User.objects.get(email=self.email).terms_accepted_at)
         self.assertIn('data', response.data)
         self.assertIn('tokens', response.data['data'])
         self.assertIn('refresh_token', response.cookies)
@@ -62,6 +64,7 @@ class AuthApiTests(TestCase):
                 'role': 'artist',
                 'password': 'weakpassword',
                 'password_confirm': 'weakpassword',
+                'accept_terms': True,
             },
             format='json',
         )
@@ -239,6 +242,70 @@ class AuthApiTests(TestCase):
         with self.settings(SOCIALACCOUNT_PROVIDERS={'google': {'APPS': []}}):
             response = browser.get('/api/v1/auth/social/google/start/')
             self.assertIn('social_error=not_configured', response['Location'])
+
+
+class AccountDeletionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.password = 'StrongPass123!'
+        self.user = User.objects.create_user(email='del@example.com', first_name='D', last_name='E', password=self.password, is_verified=True)
+
+    def login(self):
+        return self.client.post('/api/v1/auth/login/', {'email': self.user.email, 'password': self.password}, format='json')
+
+    def test_register_requires_terms(self):
+        payload = {'email': 'new@example.com', 'first_name': 'N', 'last_name': 'U', 'role': 'artist',
+                   'password': self.password, 'password_confirm': self.password}
+        self.assertEqual(self.client.post('/api/v1/auth/register/', payload, format='json').status_code, 400)
+        payload['accept_terms'] = False
+        self.assertEqual(self.client.post('/api/v1/auth/register/', payload, format='json').status_code, 400)
+
+    @mock.patch('accounts.deletion.send_mail_in_background')
+    def test_delete_then_restore_by_email_link(self, send_mail):
+        tokens = self.login().data['data']['tokens']
+        response = self.client.delete('/api/v1/auth/me/', HTTP_AUTHORIZATION=f'Bearer {tokens["access"]}')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('90 days', response.data['message'])
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+        self.assertEqual(self.client.post('/api/v1/auth/refresh/', {'refresh': tokens['refresh']}, format='json').status_code, 401)
+
+        # wrong password reveals nothing and sends nothing
+        response = self.client.post('/api/v1/auth/login/', {'email': self.user.email, 'password': 'Wrong123!x'}, format='json')
+        self.assertEqual(response.data['code'], 'invalid_credentials')
+        send_mail.assert_not_called()
+
+        response = self.login()
+        self.assertEqual((response.status_code, response.data['code']), (403, 'account_pending_deletion'))
+        link = send_mail.call_args.kwargs['message'].split('confirm here: ')[1].split()[0]
+        params = parse_qs(urlparse(link).query)
+        response = self.client.post('/api/v1/auth/restore/', {'uid': params['uid'][0], 'token': params['token'][0]}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('access', response.data['data']['tokens'])
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        self.assertIsNone(self.user.deletion_requested_at)
+        # the link works once
+        response = self.client.post('/api/v1/auth/restore/', {'uid': params['uid'][0], 'token': params['token'][0]}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    @mock.patch('accounts.deletion.send_mail_in_background')
+    def test_after_grace_period_login_fails_and_purge_deletes(self, send_mail):
+        from datetime import timedelta
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from artist_posts.models import Post
+
+        post = Post.objects.create(author=self.user, body='hello')
+        User.objects.filter(pk=self.user.pk).update(is_active=False, deletion_requested_at=timezone.now() - timedelta(days=91))
+        self.assertEqual(self.login().data['code'], 'invalid_credentials')
+        send_mail.assert_not_called()
+
+        call_command('purge_deleted_accounts', stdout=mock.Mock())
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+        self.assertFalse(Post.objects.filter(pk=post.pk).exists())
 
 
 class ChooseRoleTests(TestCase):
