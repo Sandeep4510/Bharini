@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "Bharini",
+    "slug": "bharini",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "bharini",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.bharini.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#020817",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.bharini.app"
+    },
+    "web": {
+      "output": "server",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#020817",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-secure-store",
+      "expo-video",
+      [
+        "./plugins/with-android-cmake",
+        {
+          "version": "3.31.6"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Bharini uses your photos so you can attach pictures and videos to your posts and portfolio.",
+          "cameraPermission": "Bharini uses the camera so you can take casting photos and record audition clips.",
+          "microphonePermission": "Bharini uses the microphone to record sound with your audition videos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Bharini uses the camera so you can take casting photos and record audition clips.",
+          "microphonePermission": "Bharini uses the microphone to record sound with your audition videos.",
+          "recordAudioAndroid": true,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8b5cf6",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "backgroundColor": "#020817"
+  }
+}
