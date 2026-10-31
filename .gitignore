@@ -81,6 +81,8 @@ start_servers.bat
 stop_servers.bat
 
 # Expo / React Native (apps/mobile)
+# expo-cli re-creates this file; the root .gitignore is the only one
+apps/mobile/.gitignore
 apps/mobile/android/
 apps/mobile/ios/
 .expo/
