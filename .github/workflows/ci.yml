@@ -1,0 +1,137 @@
+name: CI
+
+# Pull requests run this directly; pushes to dev/main run it from deploy.yml before deploying.
+# Only the parts that changed are tested (paths in .github/filters.yml).
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+  pull-requests: read # paths-filter lists PR files
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.f.outputs.backend == 'true' || steps.f.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' }}
+      web: ${{ steps.f.outputs.web == 'true' || steps.f.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' }}
+      mobile: ${{ steps.f.outputs.mobile == 'true' || steps.f.outputs.workflows == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: f
+        if: github.event_name != 'workflow_dispatch' # manual redeploy: test everything
+        with:
+          filters: .github/filters.yml
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: bharini
+          POSTGRES_USER: bharini
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bharini"
+          --health-interval 5s --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_NAME: bharini
+      DB_USER: bharini
+      DB_PASSWORD: ci-only
+      DJANGO_DEBUG: "true" # same as local test runs; prod settings are checked below
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt pip-audit
+      - run: python manage.py check
+      - run: python manage.py makemigrations --check --dry-run
+      - name: Deploy checklist with production settings
+        run: python manage.py check --deploy --fail-level WARNING
+        env:
+          DJANGO_DEBUG: "false"
+          DJANGO_SECRET_KEY: ci-only-${{ github.run_id }}-not-a-real-secret-key-0123456789
+          DJANGO_ALLOWED_HOSTS: api.example.com
+      - run: python manage.py test --noinput
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+        working-directory: apps/web
+      - run: npx eslint src
+        working-directory: apps/web
+
+  mobile:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test --workspace=mobile
+      - run: npx tsc --noEmit
+        working-directory: apps/mobile
+      - run: npx expo lint
+        working-directory: apps/mobile
+
+  # Catch Dockerfile breakage before merge; deploy.yml builds the real images.
+  docker-api:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          cache-from: type=gha,scope=api
+
+  docker-web:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          build-args: NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+          cache-from: type=gha,scope=web

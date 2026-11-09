@@ -96,3 +96,10 @@ web-build/
 *.p12
 *.key
 *.mobileprovision
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/**/app-secret.json

@@ -1,0 +1,56 @@
+name: Terraform
+
+# Pull requests touching infra/: format check, validate, and (once the plan roles exist) a
+# read-only `terraform plan` per environment in the job summary. Apply stays manual (infra/README.md).
+on:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/terraform.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: staging
+            role: ${{ vars.TF_PLAN_ROLE_STAGING }}
+            bucket: ${{ vars.TF_STATE_BUCKET_STAGING }}
+          - env: prod
+            role: ${{ vars.TF_PLAN_ROLE_PROD }}
+            bucket: ${{ vars.TF_STATE_BUCKET_PROD }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/envs/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff ../..
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: matrix.role != ''
+        with:
+          role-to-assume: ${{ matrix.role }}
+          aws-region: ap-south-1
+
+      - name: Init
+        run: |
+          if [ -n "${{ matrix.role }}" ]; then terraform init -input=false -backend-config="bucket=${{ matrix.bucket }}"
+          else terraform init -input=false -backend=false; fi
+      - run: terraform validate
+
+      - name: Plan
+        if: matrix.role != ''
+        run: |
+          terraform plan -input=false -lock=false -no-color > plan.txt || { cat plan.txt; exit 1; }
+          {
+            echo "### ${{ matrix.env }}: $(grep -E '^(Plan:|No changes)' plan.txt || echo 'see log')"
+            echo '<details><summary>Full plan</summary>'; echo; echo '```'; cat plan.txt; echo '```'; echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"

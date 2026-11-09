@@ -1,0 +1,15 @@
+# Which paths belong to which service. Used by ci.yml (what to test) and deploy.yml (what to ship).
+backend:
+  - 'backend/**'
+web:
+  - 'apps/web/**'
+  - 'packages/**'          # shared code used by web
+  - 'package.json'
+  - 'package-lock.json'
+mobile:
+  - 'apps/mobile/**'
+  - 'packages/**'
+  - 'package.json'
+  - 'package-lock.json'
+workflows:
+  - '.github/**'           # CI changes re-run every CI job, but deploy nothing on their own

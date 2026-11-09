@@ -66,7 +66,6 @@ CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,h
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.getenv('DJANGO_SSL_REDIRECT', 'true').lower() == 'true'
-    SECURE_REDIRECT_EXEMPT = [r'^api/v1/health/$']  # ALB health check speaks plain HTTP
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_HSTS_SECONDS', '31536000'))
@@ -146,6 +145,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'bharini.health.HealthCheckMiddleware',  # first: ALB probes by IP over HTTP
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -270,7 +270,7 @@ AWS_S3_SIGNATURE_VERSION = 's3v4'
 AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None  # bucket stays private; CloudFront reads it via OAC
 AWS_QUERYSTRING_AUTH = False
-AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'public, max-age=31536000, immutable'}
+AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'public, max-age=86400'}
 
 STORAGES = {
     'default': {

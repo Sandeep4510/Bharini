@@ -19,6 +19,7 @@ This is an npm workspaces monorepo with a Django backend.
 | `packages/auth` | Token session with pluggable storage: localStorage on the web, SecureStore on mobile (`setSessionStorage`). |
 | `packages/theme` | Colour, radius, spacing and font-size tokens. |
 | `backend/` | Django 6.1, DRF, simplejwt and django-allauth (Google only), on PostgreSQL. |
+| `infra/` | Terraform for AWS (`modules/app`, `envs/staging`, `envs/prod`). Setup steps in `infra/README.md`. |
 
 ### Backend apps (`backend/`)
 | App | What it does |
@@ -86,11 +87,11 @@ Test accounts are listed in `test_profiles.txt`.
 - **Known problems:**
   - `app.json` has no EAS `projectId`. Run `npx eas-cli@latest init` again before building for iOS or testing push.
   - `backend/.env` allows LAN IP `192.168.0.107` but not `10.0.2.2`, which the Android emulator needs.
-- **Hosting:** AWS `ap-south-1` (decided 2026-11-09). Media goes to S3 when `AWS_STORAGE_BUCKET_NAME` is set. Plan: ECS Fargate, RDS, CloudFront, Redis, Terraform, GitHub Actions via OIDC.
+- **Hosting:** AWS `ap-south-1` (decided 2026-11-09). Media goes to S3 when `AWS_STORAGE_BUCKET_NAME` is set. Terraform in `infra/` (validated, not yet applied). CI: `.github/workflows/ci.yml` on PRs. Deploy: `deploy.yml`, `dev` → staging, `main` → production (one approval). Per service: `backend/**` ships api only, `apps/web/**` + `packages/**` ships web only (`.github/filters.yml`).
+  - The ALB health check hits `/api/v1/health/` by IP, so `bharini.health.HealthCheckMiddleware` answers it before host validation. Keep it first in `MIDDLEWARE`.
 - **Not built:**
   - The casting application flow.
   - Moderation and reporting.
   - An in-app notification list.
   - Production profile editing on mobile.
-  - A daily schedule for `purge_deleted_accounts`.
   - The Grievance Officer's details on the terms page.

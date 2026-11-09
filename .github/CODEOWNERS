@@ -1,0 +1,5 @@
+# Reviews required (with branch protection "Require review from Code Owners").
+# Infra and CI/CD can change AWS and production, so they need the owner's approval.
+/infra/          @Sandeep4510
+/.github/        @Sandeep4510
+/backend/bharini/settings.py @Sandeep4510

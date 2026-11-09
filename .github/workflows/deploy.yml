@@ -1,0 +1,159 @@
+name: Deploy
+
+# dev  -> staging    (automatic)
+# main -> production (one approval: required reviewers on the "production-approval" Environment)
+#
+# Each service ships only when its own paths changed (.github/filters.yml):
+#   backend/**                      -> api  (build, migrate, roll out)
+#   apps/web/**, packages/**, lock  -> web  (build, roll out)
+#   apps/mobile/**                  -> nothing here (EAS builds the app)
+#   infra/**, docs                  -> nothing here (terraform.yml plans; apply is manual)
+on:
+  push:
+    branches: [dev, main]
+    paths-ignore: ['infra/**', 'docs/**', '**/*.md']
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Which service to redeploy from this branch
+        type: choice
+        options: [both, api, web]
+        default: both
+
+permissions:
+  contents: read
+  id-token: write # GitHub OIDC -> AWS role, no stored AWS keys
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false # never interrupt a migration
+
+jobs:
+  changes:
+    if: github.ref_name == 'dev' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.f.outputs.backend == 'true' || inputs.service == 'both' || inputs.service == 'api' }}
+      web: ${{ steps.f.outputs.web == 'true' || inputs.service == 'both' || inputs.service == 'web' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: f
+        if: github.event_name == 'push'
+        with:
+          filters: .github/filters.yml
+
+  ci:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: read
+
+  # One approval for the whole prod release, instead of one per service job.
+  approval:
+    needs: ci
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: production-approval
+    steps:
+      - run: echo "Approved by ${{ github.actor }}"
+
+  api:
+    needs: [changes, ci, approval]
+    if: >-
+      always() && needs.changes.outputs.api == 'true' && needs.ci.result == 'success'
+      && (needs.approval.result == 'success' || needs.approval.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      url: ${{ vars.API_URL }}
+    env:
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      IMAGE: ${{ vars.ECR_API }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      # Tags are immutable git SHAs, so a re-run reuses the image already pushed.
+      - name: Image already pushed?
+        id: exists
+        run: |
+          repo='${{ vars.ECR_API }}'
+          if aws ecr describe-images --repository-name "${repo#*/}" --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1
+          then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.found == 'false'
+      - uses: docker/build-push-action@v6
+        if: steps.exists.outputs.found == 'false'
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Register task definition
+        id: td
+        run: echo "arn=$(.github/scripts/ecs-deploy.sh register api "$IMAGE")" >> "$GITHUB_OUTPUT"
+      - name: Migrate database
+        run: .github/scripts/ecs-deploy.sh migrate "${{ steps.td.outputs.arn }}"
+      - name: Roll out
+        run: .github/scripts/ecs-deploy.sh rollout api "${{ steps.td.outputs.arn }}"
+      - name: Smoke test
+        run: curl -fsS --retry 5 --retry-delay 5 "${{ vars.API_URL }}/api/v1/health/"
+
+  web:
+    # After api when both changed (new web may call new endpoints); alone when only web changed.
+    needs: [changes, ci, approval, api]
+    if: >-
+      always() && needs.changes.outputs.web == 'true' && needs.ci.result == 'success'
+      && (needs.approval.result == 'success' || needs.approval.result == 'skipped')
+      && (needs.api.result == 'success' || needs.api.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      url: ${{ vars.WEB_URL }}
+    env:
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      IMAGE: ${{ vars.ECR_WEB }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Image already pushed?
+        id: exists
+        run: |
+          repo='${{ vars.ECR_WEB }}'
+          if aws ecr describe-images --repository-name "${repo#*/}" --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1
+          then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.found == 'false'
+      - uses: docker/build-push-action@v6
+        if: steps.exists.outputs.found == 'false'
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}
+          build-args: NEXT_PUBLIC_API_BASE_URL=${{ vars.API_URL }} # baked in at build time
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Register task definition
+        id: td
+        run: echo "arn=$(.github/scripts/ecs-deploy.sh register web "$IMAGE")" >> "$GITHUB_OUTPUT"
+      - name: Roll out
+        run: .github/scripts/ecs-deploy.sh rollout web "${{ steps.td.outputs.arn }}"
+      - name: Smoke test
+        run: curl -fsS --retry 5 --retry-delay 5 -o /dev/null "${{ vars.WEB_URL }}/"
