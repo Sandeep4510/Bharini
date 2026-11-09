@@ -1,0 +1,13 @@
+Mobile app bug and security report
+
+CRITICAL
+- Open: npm audit reports 3 critical advisories in the development lint toolchain. babel-traverse is below 7.23.2 through eslint-config-expo@5.1.3 and babel-eslint. npm reports no compatible automatic fix. This chain is development-only.
+
+ERROR
+- Open: eslint@4.0.0 is listed as a non-dev mobile dependency. Expo lint requires ESLint >=8.57.0, so mobile lint cannot run. This also exposes the dependency tree to a high-severity tmp advisory; npm audit --omit=dev reports 1 high, 31 moderate, and 3 low advisories.
+- Fixed: Partial session updates could erase access or refresh tokens when the update omitted those fields. saveSession now preserves omitted tokens and still deletes explicitly null tokens.
+
+WARNING
+- Open: Full mobile dependency audit reports 45 advisories: 3 critical, 1 high, 38 moderate, and 3 low. Do not apply npm's suggested Expo downgrade without checking SDK compatibility.
+- Fixed: Push-notification payloads could supply malformed or path-like route identifiers. Route identifiers are now validated before navigation.
+- Coverage limit: Tests are unit/component tests. They do not exercise authenticated backend integration, live device behavior, or Android/iOS secure-storage guarantees.

@@ -263,3 +263,12 @@ Build order agreed with the user: (1) Login → (2) Home feed, Profile, Messages
 - Respond using the caveman (terse) and ponytail (smallest complete change) skills.
 - Commit only when asked. Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - When merging other developers' work, prioritise the pulled version and follow its structure.
+## iOS (same Expo app, apps/mobile)
+- No separate iOS codebase: slices 1-4 already run on iOS (NativeTabs, inline iOS date picker, KeyboardAvoidingView padding, expo-camera + volume shutter, image picker exports JPEG at quality<1, .mov accepted by backend, push token sent with platform 'ios').
+- Introspected iOS config OK: camera/mic/photos usage strings, aps-environment entitlement, ATS allows http in dev.
+- Windows can't prebuild/build iOS. Use EAS cloud: `apps/mobile/eas.json` profiles `development` (iPhone, internal) and `development-simulator`.
+- iPhone steps: paid Apple Developer account; `npx eas login`, `npx eas init`, `npx eas device:create` (register iPhone), `npx eas build -p ios --profile development`; install via the link/QR; `.env` API URL = PC LAN IP; `runserver 0.0.0.0:8000`; LAN IP in DJANGO_ALLOWED_HOSTS; `npx expo start --dev-client`.
+- iOS push: APNs key created by `eas credentials` during build. Not yet tested on a real device.
+- 2026-11-01: EAS project @sanath7/bharini linked (projectId in app.json). EAS Simulator not enabled (waitlist); tested via Appetize.io instead (app key xzkw2hfxrieubn5msmgkigucpi).
+- First iOS build crashed at launch: dyld missing ExpoModulesJSI symbol (prebuilt expo-camera vs expo-modules-jsi 58.0.20). Fixed with `npx expo install --fix` (expo 58.0.22, modules-jsi 58.0.21). Rebuilt (build e02be559), uploaded, NOT yet confirmed launching. Android APK must be rebuilt after this upgrade.
+- Tunnels/Metro/Django stopped; backend/.env and apps/mobile/.env restored (10.0.2.2). Next: real iPhone via `development` profile (needs Apple Developer account).

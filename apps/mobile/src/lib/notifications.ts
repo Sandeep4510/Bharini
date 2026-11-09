@@ -17,6 +17,11 @@ Notifications.setNotificationHandler({
 
 let registeredToken: string | null = null;
 
+function routeId(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return typeof value === 'string' && /^[\w-]+$/.test(value) ? value : null;
+}
+
 /**
  * Asks for permission, gets this phone's Expo push token and registers it with the backend.
  * Never throws: without permission, an EAS project id or Firebase setup the app simply gets no pushes.
@@ -60,10 +65,12 @@ export async function unregisterForPush() {
 /** Where a tapped notification leads, from the `data` the backend puts in each push. */
 export function openFromNotification(data: Record<string, unknown> | undefined) {
   if (!data) return;
-  if (data.kind === 'messages' && data.conversation_id) {
-    router.push({ pathname: '/chat/[id]', params: { id: String(data.conversation_id) } });
-  } else if ((data.kind === 'connections' || data.kind === 'follows') && data.user_id) {
-    router.push({ pathname: '/user/[id]', params: { id: String(data.user_id) } });
+  if (data.kind === 'messages') {
+    const id = routeId(data.conversation_id);
+    if (id) router.push({ pathname: '/chat/[id]', params: { id } });
+  } else if (data.kind === 'connections' || data.kind === 'follows') {
+    const id = routeId(data.user_id);
+    if (id) router.push({ pathname: '/user/[id]', params: { id } });
   } else if (data.kind === 'casting') {
     router.push('/home');
   }

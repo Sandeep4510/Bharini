@@ -41,16 +41,14 @@ export function readSession(): AuthSession {
 
 export function saveSession(session: Partial<AuthSession>) {
   const storage = store();
-  if (session.accessToken === null || session.accessToken === undefined) {
-    storage.removeItem(AUTH_STORAGE_KEYS.accessToken);
-  } else {
-    storage.setItem(AUTH_STORAGE_KEYS.accessToken, session.accessToken);
+  if (session.accessToken !== undefined) {
+    if (session.accessToken === null) storage.removeItem(AUTH_STORAGE_KEYS.accessToken);
+    else storage.setItem(AUTH_STORAGE_KEYS.accessToken, session.accessToken);
   }
 
-  if (session.refreshToken === null || session.refreshToken === undefined) {
-    storage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
-  } else {
-    storage.setItem(AUTH_STORAGE_KEYS.refreshToken, session.refreshToken);
+  if (session.refreshToken !== undefined) {
+    if (session.refreshToken === null) storage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
+    else storage.setItem(AUTH_STORAGE_KEYS.refreshToken, session.refreshToken);
   }
 }
 
