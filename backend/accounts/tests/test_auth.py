@@ -62,6 +62,7 @@ class AuthTestCase(APITestCase):
             'role': 'artist',
             'password': PASSWORD,
             'password_confirm': PASSWORD,
+            'accept_terms': True,
         }
         payload.update(overrides)
         return payload
@@ -681,7 +682,7 @@ class MeTests(AuthTestCase):
             set(data),
             {
                 'id', 'email', 'username', 'first_name', 'last_name', 'role', 'is_verified',
-                'email_verified_at', 'date_joined', 'onboarding_complete', 'completion_percent',
+                'email_verified_at', 'date_joined', 'onboarding_complete', 'completion_percent', 'role_confirmed',
             },
         )
         self.assertEqual(data['id'], user.pk)

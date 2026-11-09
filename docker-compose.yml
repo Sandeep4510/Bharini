@@ -1,0 +1,47 @@
+# Local production-like stack: docker compose up --build
+# Web on :3000, API on :8000. Media stays on a local volume (no S3 needed).
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: bharini
+      POSTGRES_USER: bharini
+      POSTGRES_PASSWORD: bharini-local
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bharini"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+  api:
+    build: {context: ., dockerfile: backend/Dockerfile}
+    env_file: [{path: backend/.env, required: false}]
+    environment:
+      DJANGO_DEBUG: "true"
+      DB_HOST: db
+      DB_NAME: bharini
+      DB_USER: bharini
+      DB_PASSWORD: bharini-local
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api
+    command: sh -c "python manage.py migrate --noinput && gunicorn bharini.wsgi --bind 0.0.0.0:8000 --reload"
+    ports: ["8000:8000"]
+    volumes: [media:/app/media]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: {NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"}
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  media:

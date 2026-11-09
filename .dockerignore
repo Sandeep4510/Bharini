@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.local
+.git
+backend/media
+backend/staticfiles
+backend/db.sqlite3
+apps/mobile/android
+apps/mobile/ios

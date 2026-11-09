@@ -17,6 +17,8 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.db import connection
+from django.http import JsonResponse
 from django.urls import include, path
 
 from artist_posts.urls import user_urlpatterns
@@ -25,7 +27,18 @@ admin.site.site_header = 'Bharini admin'
 admin.site.site_title = 'Bharini admin'
 admin.site.index_title = 'Manage Bharini'
 
+
+def health(request):
+    """ALB / deploy smoke check: 200 when the app can reach the database."""
+    try:
+        connection.ensure_connection()
+    except Exception:
+        return JsonResponse({'code': 'unavailable', 'message': 'Database unreachable.', 'data': None}, status=503)
+    return JsonResponse({'code': 'ok', 'message': 'OK', 'data': None})
+
+
 urlpatterns = [
+    path('api/v1/health/', health),
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('accounts.urls')),
     path('api/v1/profile/', include('profiles.urls')),

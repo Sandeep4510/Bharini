@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlparse
 from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 from django.test import Client, TestCase
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -16,6 +17,7 @@ User = get_user_model()
 
 class AuthApiTests(TestCase):
     def setUp(self):
+        cache.clear()  # throttle counters otherwise leak between tests
         self.client = APIClient()
         self.email = 'artist@example.com'
         self.password = 'StrongPass123!'
@@ -246,6 +248,7 @@ class AuthApiTests(TestCase):
 
 class AccountDeletionTests(TestCase):
     def setUp(self):
+        cache.clear()  # throttle counters otherwise leak between tests
         self.client = APIClient()
         self.password = 'StrongPass123!'
         self.user = User.objects.create_user(email='del@example.com', first_name='D', last_name='E', password=self.password, is_verified=True)

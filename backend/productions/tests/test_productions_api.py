@@ -56,7 +56,7 @@ class ProductionProfileAPITests(APITestCase):
         fake = SimpleUploadedFile('avatar.png', b'not an image', content_type='image/png')
         response = self.client.post('/api/v1/productions/', {'name': 'X', 'kind': 'individual', 'username': 'x_films', 'profile_picture': fake}, format='multipart')
         self.assertEqual(response.status_code, 400)
-        self.assertIn('profile_picture', response.json())
+        self.assertIn('profile_picture', response.json()['field_errors'])
 
 
 class ProductionFollowCountsTests(APITestCase):

@@ -39,28 +39,39 @@ load_dotenv_file(BASE_DIR.parent / '.env')
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    'DJANGO_SECRET_KEY',
-    'dev-only-change-me-very-long-secret-key-at-least-32-chars',
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() == 'true'
+DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
+
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or (
+    'dev-only-change-me-very-long-secret-key-at-least-32-chars' if DEBUG else None
+)
+if not SECRET_KEY:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('DJANGO_SECRET_KEY is required when DJANGO_DEBUG is false.')
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,10.0.2.2').split(',') if host.strip()]
 CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+def env_list(name: str, default: str = '') -> list[str]:
+    return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
+
+
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
+
+# Behind the AWS ALB/CloudFront, TLS ends at the load balancer.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = os.getenv('DJANGO_SSL_REDIRECT', 'true').lower() == 'true'
+    SECURE_REDIRECT_EXEMPT = [r'^api/v1/health/$']  # ALB health check speaks plain HTTP
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 AUTH_USER_MODEL = 'accounts.User'
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
@@ -137,6 +148,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -200,7 +212,7 @@ DATABASES = {
         'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
         'NAME': os.getenv('DB_NAME', 'bharini'),
         'USER': os.getenv('DB_USER', 'bharini'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'hanuman'),
+        'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
@@ -245,10 +257,38 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Uploaded media. Local disk for now; point STORAGES['default'] at GCS (django-storages) later.
+# Uploaded media. Local disk unless AWS_STORAGE_BUCKET_NAME is set, then S3 (served via CloudFront).
+# Credentials come from the ECS task role in AWS; locally use AWS_PROFILE or AWS_ACCESS_KEY_ID.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', '')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'ap-south-1')
+AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN') or None  # CloudFront domain
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None  # bucket stays private; CloudFront reads it via OAC
+AWS_QUERYSTRING_AUTH = False
+AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'public, max-age=31536000, immutable'}
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'storages.backends.s3.S3Storage' if AWS_STORAGE_BUCKET_NAME
+        else 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage' if not DEBUG
+        else 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+}
+
+# Shared cache so DRF throttles hold across containers. LocMem locally.
+REDIS_URL = os.getenv('REDIS_URL', '')
+CACHES = {
+    'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': REDIS_URL}
+    if REDIS_URL else {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+}
 
 
 # Email
