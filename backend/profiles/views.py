@@ -27,7 +27,7 @@ from .serializers import (
     suggest_usernames,
     username_taken,
 )
-from .slots import get_slot
+from .slots import WRITING_MAX_CHARS, get_slot
 
 User = get_user_model()
 
@@ -226,10 +226,12 @@ class MediaSlotAPIView(ArtistAPIView):
         if error:
             return error
         upload = request.FILES.get('file')
+        if not upload and slot['kind'] == 'writing' and 'text' in request.data:
+            return self.save_text(profile, discipline, slot_key, request.data['text'])
         if not upload:
             return self.missing_file_error()
         try:
-            if slot['kind'] == 'image':
+            if slot['kind'] in ('image', 'writing'):
                 upload, duration = process_photo(upload, None), 0
             else:
                 duration = validate_media(upload, slot)
@@ -239,9 +241,10 @@ class MediaSlotAPIView(ArtistAPIView):
         item = PortfolioMedia.objects.filter(profile=profile, discipline=discipline, slot=slot_key).first()
         old_name = item.file.name if item else None
         item = item or PortfolioMedia(profile=profile, discipline=discipline, slot=slot_key)
-        item.kind = slot['kind']
+        item.kind = 'image' if slot['kind'] == 'writing' else slot['kind']
         item.duration_seconds = duration
         item.file = upload
+        item.text = ''
         item.save()
         if old_name:
             item.file.storage.delete(old_name)
@@ -251,9 +254,22 @@ class MediaSlotAPIView(ArtistAPIView):
         profile = self.get_profile()
         item = PortfolioMedia.objects.filter(profile=profile, discipline=discipline, slot=slot_key).first()
         if item:
-            item.file.delete(save=False)
+            if item.file:
+                item.file.delete(save=False)
             item.delete()
         return self.profile_response(profile, 'Upload removed.')
+
+    def save_text(self, profile, discipline, slot_key, text):
+        text = str(text).strip()
+        if not text or len(text) > WRITING_MAX_CHARS:
+            message = 'Write something first.' if not text else f'Keep it under {WRITING_MAX_CHARS} characters.'
+            return error_response(self.request, 'validation_error', message, status.HTTP_400_BAD_REQUEST, field_errors={'text': [message]})
+        item, _ = PortfolioMedia.objects.get_or_create(profile=profile, discipline=discipline, slot=slot_key, defaults={'kind': 'text'})
+        if item.file:
+            item.file.delete(save=False)  # switching a picture post to text
+        item.kind, item.text, item.duration_seconds = 'text', text, 0
+        item.save()
+        return self.profile_response(profile, 'Post saved.')
 
 
 class DocumentsAPIView(ArtistAPIView):

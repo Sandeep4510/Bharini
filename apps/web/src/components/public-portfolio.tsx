@@ -45,9 +45,10 @@ export function PublicPortfolio({ portfolio }: { portfolio: NonNullable<PublicPr
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {section.slots.map((slot) => (
               <figure key={slot.key}>
-                {slot.kind === 'image' ? <img src={slot.file?.url} alt={slot.label} className="aspect-video w-full rounded-xl bg-black object-cover" /> : null}
-                {slot.kind === 'video' ? <video src={slot.file?.url} controls preload="metadata" className="aspect-video w-full rounded-xl bg-black" /> : null}
-                {slot.kind === 'audio' ? <audio src={slot.file?.url} controls preload="metadata" className="w-full" /> : null}
+                {slot.file?.kind === 'image' ? <img src={slot.file.url ?? undefined} alt={slot.label} className="aspect-video w-full rounded-xl bg-black object-cover" /> : null}
+                {slot.file?.kind === 'text' ? <p className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-900/60 p-3 text-sm text-slate-200">{slot.file.text}</p> : null}
+                {slot.kind === 'video' ? <video src={slot.file?.url ?? undefined} controls preload="metadata" className="aspect-video w-full rounded-xl bg-black" /> : null}
+                {slot.kind === 'audio' ? <audio src={slot.file?.url ?? undefined} controls preload="metadata" className="w-full" /> : null}
                 <figcaption className="mt-1 text-xs text-slate-400">{slot.label}</figcaption>
               </figure>
             ))}

@@ -15,7 +15,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from accounts.mail import _send
 from accounts.models import RefreshSession
-from accounts.social import SOCIAL_ROLE_SESSION_KEY, SocialAccountAdapter
+from accounts.social import SOCIAL_APP_SESSION_KEY, SOCIAL_ROLE_SESSION_KEY, SocialAccountAdapter
 from accounts.validators import CharacterClassValidator
 from accounts.views import social_code_key
 from profiles.models import ArtistProfile
@@ -612,6 +612,29 @@ class SocialLoginTests(AuthTestCase):
         replay = self.client.post(f'{BASE}/social/exchange/', {'code': code}, format='json')
         self.assertEqual(replay.status_code, 400)
         self.assertEqual(replay.data['code'], 'invalid_social_code')
+
+    def test_sign_in_started_from_the_app_returns_to_the_app(self):
+        response = Client().get(f'{BASE}/social/twitter/start/?app=1')
+        self.assertEqual(response['Location'], 'bharini://login?social_error=unknown_provider')
+
+        user = self.make_user()
+        browser = Client()
+        with override_settings(SOCIALACCOUNT_PROVIDERS=self.GOOGLE_APPS):
+            browser.get(f'{BASE}/social/google/start/?app=1&role=artist')
+        browser.force_login(user, backend='django.contrib.auth.backends.ModelBackend')
+        session = browser.session
+        session[SOCIAL_APP_SESSION_KEY] = True  # force_login rotates the session
+        session.save()
+
+        response = browser.get(f'{BASE}/social/complete/')
+        self.assertTrue(response['Location'].startswith('bharini://login?code='))
+        code = parse_qs(urlparse(response['Location']).query)['code'][0]
+        self.assertEqual(self.client.post(f'{BASE}/social/exchange/', {'code': code}, format='json').status_code, 200)
+
+        # a later website sign-in in the same browser goes back to the website
+        with override_settings(SOCIALACCOUNT_PROVIDERS=self.GOOGLE_APPS):
+            browser.get(f'{BASE}/social/google/start/')
+        self.assertFalse(browser.session[SOCIAL_APP_SESSION_KEY])
 
     def test_exchange_rejects_unknown_code(self):
         response = self.client.post(f'{BASE}/social/exchange/', {'code': 'nope'}, format='json')

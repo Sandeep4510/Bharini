@@ -33,10 +33,12 @@ Each discipline gets fixed upload slots. `GET /` returns them under `media_slots
 | `director` | `reel_1`–`reel_3` | video | 120 s | 200 MB |
 | `cinematographer` | `image_1`–`image_5` | image | | 8 MB |
 | `cinematographer` | `video_1`–`video_5` | video | 30 s | 60 MB |
+| `writer` | `post_1`–`post_5` | writing (image or text) | | 8 MB, text 2000 chars |
 
 - Video: `.mp4`, `.mov`, `.webm`. Audio: `.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`. Images: JPG, PNG, or WebP.
 - A slot can only be filled if its discipline is in `disciplines`. Otherwise: `400` `discipline_not_selected`.
 - Actors have 9 emotion slots. Clip length is checked on upload.
+- Writer slots have `kind: "writing"` and `max_chars: 2000`. Each post holds either a picture or a text; the writer picks per post. No videos.
 
 ---
 
@@ -88,7 +90,7 @@ Response `data`:
 }
 ```
 
-- `file` is `null` until something is uploaded for that slot.
+- `file` is `null` until something is uploaded for that slot. Filled slots also carry `file.kind` (`image`, `video`, `audio`, or `text`) and `file.text`. For a text post `file.url` is `null`.
 - `missing_fields` lists what blocks onboarding: `username`, `profile_photo`, `bio`, `gender`, `date_of_birth`, `location`, `phone`, `disciplines`, `height_cm` (actors only), `languages`.
 - `onboarding_complete` is true when `missing_fields` is empty.
 - `completion_percent` counts required fields, casting photos (actors and choreographers), and media slots. Use it for the progress bar.
@@ -162,6 +164,8 @@ Removes a casting photo. Returns the full profile.
 ## PUT `media/<discipline>/<slot_key>/`
 
 Uploads a portfolio file for one slot. Multipart field: `file`. Replaces any file already in that slot. Returns the full profile.
+
+Writer slots also accept a text post instead: send the field `text` (no `file`), 1–2000 characters after trimming. Saving a text deletes the slot's picture, and uploading a picture clears its text. Empty or too-long text: `400` `validation_error` with `field_errors.text`.
 
 Errors:
 - `400` `discipline_not_selected`: add the discipline first.

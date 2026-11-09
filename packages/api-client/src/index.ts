@@ -252,8 +252,10 @@ export class ApiClient {
   }
 
   /** Full-page URL that starts Google sign-in on the backend (django-allauth). */
-  socialLoginUrl(provider: 'google', role?: string) {
-    return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${role ? `?role=${encodeURIComponent(role)}` : ''}`;
+  socialLoginUrl(provider: 'google', role?: string, fromApp = false) {
+    // fromApp: the backend finishes at bharini://login?code=… instead of the website
+    const query = new URLSearchParams({ ...(role ? { role } : {}), ...(fromApp ? { app: '1' } : {}) }).toString();
+    return `${this.baseUrl}/api/v1/auth/social/${provider}/start/${query ? `?${query}` : ''}`;
   }
 
   exchangeSocialCode(code: string) {
@@ -298,6 +300,15 @@ export class ApiClient {
   uploadMedia(discipline: string, slot: string, file: File) {
     const body = new FormData();
     body.append('file', file);
+    return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, {
+      method: 'PUT',
+      body,
+    });
+  }
+
+  saveMediaText(discipline: string, slot: string, text: string) {
+    const body = new FormData();
+    body.append('text', text);
     return this.request<AuthApiResponse<ArtistProfile>>(`/api/v1/profile/media/${discipline}/${slot}/`, {
       method: 'PUT',
       body,

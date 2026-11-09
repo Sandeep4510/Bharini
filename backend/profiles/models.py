@@ -45,6 +45,7 @@ class Discipline(models.TextChoices):
     MUSICIAN = 'musician', 'Musician'
     DIRECTOR = 'director', 'Director'
     CINEMATOGRAPHER = 'cinematographer', 'Cinematographer / Cameraman'
+    WRITER = 'writer', 'Writer'
 
 
 def photo_upload_to(instance, filename):
@@ -180,13 +181,15 @@ class PortfolioMedia(models.Model):
         VIDEO = 'video', 'Video'
         AUDIO = 'audio', 'Audio'
         IMAGE = 'image', 'Image'
+        TEXT = 'text', 'Text'
 
     profile = models.ForeignKey(ArtistProfile, on_delete=models.CASCADE, related_name='media')
     discipline = models.CharField(max_length=20, choices=Discipline.choices)
     slot = models.CharField(max_length=20)
     kind = models.CharField(max_length=10, choices=Kind.choices)
-    file = models.FileField(upload_to=media_upload_to)
-    duration_seconds = models.FloatField()
+    file = models.FileField(upload_to=media_upload_to, blank=True)  # empty for text posts
+    text = models.TextField(blank=True)
+    duration_seconds = models.FloatField(default=0)
     uploaded_at = models.DateTimeField(auto_now=True)
 
     class Meta:

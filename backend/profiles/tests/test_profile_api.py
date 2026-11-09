@@ -261,6 +261,53 @@ class ProfileApiTests(TestCase):
         self.assertEqual([slot['kind'] for slot in slots].count('image'), 5)
         self.assertEqual([slot['kind'] for slot in slots].count('video'), 5)
 
+    def test_writer_posts_switch_between_picture_and_text(self, check_face_mock):
+        response = self.client.patch('/api/v1/profile/', {'disciplines': ['writer']}, format='json')
+        slots = response.data['data']['media_slots'][0]['slots']
+        self.assertEqual([slot['key'] for slot in slots], ['post_1', 'post_2', 'post_3', 'post_4', 'post_5'])
+        self.assertTrue(all(slot['kind'] == 'writing' and slot['max_chars'] == 2000 for slot in slots))
+        self.assertFalse(ArtistProfile.objects.get(user=self.user).needs_casting_photos)
+
+        response = self.client.put('/api/v1/profile/media/writer/post_1/', {'file': make_image()}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        item = PortfolioMedia.objects.get(profile__user=self.user, slot='post_1')
+        self.assertEqual(item.kind, 'image')
+        picture_name = item.file.name
+        check_face_mock.assert_not_called()
+
+        # picture -> text deletes the picture
+        response = self.client.put('/api/v1/profile/media/writer/post_1/', {'text': '  A scene.  '}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        item.refresh_from_db()
+        self.assertEqual((item.kind, item.text, item.file.name), ('text', 'A scene.', ''))
+        self.assertFalse(item.file.storage.exists(picture_name))
+        saved = response.data['data']['media_slots'][0]['slots'][0]['file']
+        self.assertEqual((saved['kind'], saved['text'], saved['url']), ('text', 'A scene.', None))
+
+        # text -> picture clears the text
+        self.client.put('/api/v1/profile/media/writer/post_1/', {'file': make_image()}, format='multipart')
+        item.refresh_from_db()
+        self.assertEqual((item.kind, item.text), ('image', ''))
+
+        for bad_text in ('   ', 'x' * 2001):
+            response = self.client.put('/api/v1/profile/media/writer/post_2/', {'text': bad_text}, format='multipart')
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('text', response.data['field_errors'])
+        response = self.client.put('/api/v1/profile/media/writer/post_2/', {'text': 'x' * 2000}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        response = self.client.put('/api/v1/profile/media/writer/post_3/', {'file': make_video(5)}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.delete('/api/v1/profile/media/writer/post_2/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(PortfolioMedia.objects.filter(profile__user=self.user, slot='post_2').exists())
+
+        # text is only for writer posts
+        self.client.patch('/api/v1/profile/', {'disciplines': ['writer', 'cinematographer']}, format='json')
+        response = self.client.put('/api/v1/profile/media/cinematographer/image_1/', {'text': 'hi'}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+
     def test_alt_email_pin_flow(self, check_face_mock):
         self.client.patch('/api/v1/profile/', {'alt_email': 'asha.alt@example.com'}, format='json')
         response = self.client.post('/api/v1/profile/alt-email/send-pin/')

@@ -4,6 +4,7 @@ MB = 1024 * 1024
 
 EMOTIONS = ('love', 'laughter', 'sorrow', 'anger', 'courage', 'fear', 'disgust', 'wonder', 'peace')
 SHOWREEL_LINK_LIMIT = 5
+WRITING_MAX_CHARS = 2000
 
 
 def _numbered(prefix, label, count, kind, max_seconds, max_mb):
@@ -26,6 +27,8 @@ SLOTS = {
     'director': _numbered('reel', 'Reel', 3, 'video', 120, 200),
     # images have no length; max_seconds stays 0
     'cinematographer': _numbered('image', 'Image', 5, 'image', 0, 8) + _numbered('video', 'Video', 5, 'video', 30, 60),
+    # each post is a picture or a text, the writer picks per post
+    'writer': [{**slot, 'max_chars': WRITING_MAX_CHARS} for slot in _numbered('post', 'Post', 5, 'writing', 0, 8)],
 }
 
 

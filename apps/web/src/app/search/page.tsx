@@ -23,6 +23,7 @@ const EXTRA_FILTERS: Record<string, ExtraFilter[]> = {
   musician: [],
   choreographer: [],
   director: [],
+  writer: ['language'],
 };
 
 function toApiFilters(filters: Filters): ArtistDirectoryFilters {

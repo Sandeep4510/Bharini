@@ -15,7 +15,7 @@ export type AuthUser = {
   completion_percent?: number | null;
 };
 
-export type Discipline = 'actor' | 'singer' | 'choreographer' | 'musician' | 'director' | 'cinematographer';
+export type Discipline = 'actor' | 'singer' | 'choreographer' | 'musician' | 'director' | 'cinematographer' | 'writer';
 export type Gender = 'male' | 'female' | 'non_binary';
 export type LanguageLevel = 'native' | 'fluent' | 'conversational' | 'basic';
 export type PhotoSlot = 'center' | 'left' | 'right' | 'full_length';
@@ -25,10 +25,11 @@ export type ProfileLanguage = { language: string; level: LanguageLevel };
 export type MediaSlot = {
   key: string;
   label: string;
-  kind: 'video' | 'audio' | 'image';
+  kind: 'video' | 'audio' | 'image' | 'writing'; // writing: a writer's post, a picture or a text
   max_seconds: number;
   max_mb: number;
-  file: { url: string; duration_seconds: number } | null;
+  max_chars?: number;
+  file: { url: string | null; duration_seconds: number; kind: 'video' | 'audio' | 'image' | 'text'; text: string } | null;
 };
 
 export type DisciplineMedia = { discipline: Discipline; label: string; slots: MediaSlot[] };

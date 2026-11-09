@@ -166,7 +166,7 @@ class ArtistProfileSerializer(serializers.ModelSerializer):
             slots = []
             for slot in SLOTS[discipline]:
                 item = uploaded.get((discipline, slot['key']))
-                file = {'url': absolute_url(request, item.file), 'duration_seconds': item.duration_seconds} if item else None
+                file = {'url': absolute_url(request, item.file), 'duration_seconds': item.duration_seconds, 'kind': item.kind, 'text': item.text} if item else None
                 slots.append({**slot, 'file': file})
             sections.append({'discipline': discipline, 'label': Discipline(discipline).label, 'slots': slots})
         return sections

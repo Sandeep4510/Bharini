@@ -103,3 +103,4 @@ web-build/
 *.tfstate.*
 *.tfplan
 infra/**/app-secret.json
+/2026-11-07-110636-this-session-is-being-continued-from-a-previous-c.txt

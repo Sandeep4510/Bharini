@@ -23,7 +23,7 @@ from .deletion import DELETION_GRACE, request_deletion, restorable, restore, res
 from .mail import send_mail_in_background
 from .models import RefreshSession
 from .responses import error_response, ok_response
-from .social import SIGNUP_ROLES, SOCIAL_ROLE_SESSION_KEY
+from .social import SIGNUP_ROLES, SOCIAL_APP_SESSION_KEY, SOCIAL_ROLE_SESSION_KEY, social_redirect
 from .serializers import (
     CookieTokenRefreshSerializer,
     LoginSerializer,
@@ -213,10 +213,12 @@ def social_code_key(code):
 
 def social_start(request, provider):
     """Remember the role picked on the register page, then hand over to allauth's provider login."""
+    # ?app=1: started from the mobile app, so finish there instead of on the website
+    request.session[SOCIAL_APP_SESSION_KEY] = request.GET.get('app') == '1'
     if provider not in SOCIAL_PROVIDERS:
-        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=unknown_provider')
+        return social_redirect(request, '/auth/login', 'social_error=unknown_provider')
     if not settings.SOCIALACCOUNT_PROVIDERS[provider]['APPS']:
-        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=not_configured')
+        return social_redirect(request, '/auth/login', 'social_error=not_configured')
     role = request.GET.get('role')
     if role in SIGNUP_ROLES:
         request.session[SOCIAL_ROLE_SESSION_KEY] = role
@@ -228,12 +230,13 @@ def social_start(request, provider):
 def social_complete(request):
     """allauth lands here (LOGIN_REDIRECT_URL) with a Django session; swap it for a one-time code."""
     if not request.user.is_authenticated:
-        return redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=unknown')
+        return social_redirect(request, '/auth/login', 'social_error=unknown')
     code = secrets.token_urlsafe(32)
     # shortcut: default cache is per-process memory; use a shared cache (Redis) once Django runs multiple workers
     cache.set(social_code_key(code), request.user.pk, SOCIAL_CODE_LIFETIME_SECONDS)
+    response = social_redirect(request, '/auth/social', f'code={code}')  # before logout() clears the session
     logout(request)  # the frontend uses JWTs, not this session
-    return redirect(f'{settings.FRONTEND_URL}/auth/social?code={code}')
+    return response
 
 
 class SocialExchangeAPIView(APIView):

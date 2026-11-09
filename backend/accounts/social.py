@@ -1,5 +1,6 @@
 """Glue between django-allauth's Google login and our JWT auth."""
 from django.conf import settings
+from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.utils import timezone
 
@@ -10,6 +11,20 @@ from .deletion import restorable, send_restore_link
 from .models import User
 
 SOCIAL_ROLE_SESSION_KEY = 'social_signup_role'
+SOCIAL_APP_SESSION_KEY = 'social_from_app'
+# fixed, not taken from the request, so this can never become an open redirect
+APP_LOGIN_URL = 'bharini://login'
+
+
+class AppRedirect(HttpResponseRedirect):
+    allowed_schemes = ['http', 'https', 'bharini']
+
+
+def social_redirect(request, web_path, query):
+    """Ends Google sign-in in the mobile app when it started there, otherwise on the website."""
+    if request.session.get(SOCIAL_APP_SESSION_KEY):
+        return AppRedirect(f'{APP_LOGIN_URL}?{query}')
+    return redirect(f'{settings.FRONTEND_URL}{web_path}?{query}')
 SIGNUP_ROLES = (User.Roles.ARTIST, User.Roles.PRODUCTION_HOUSE)
 
 
@@ -24,7 +39,7 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         deleted = restorable(User.objects.filter(pk=sociallogin.user.pk)).first() if sociallogin.user.pk else None
         if deleted:
             send_restore_link(deleted)
-            raise ImmediateHttpResponse(redirect(f'{settings.FRONTEND_URL}/auth/login?social_error=pending_deletion'))
+            raise ImmediateHttpResponse(social_redirect(request, '/auth/login', 'social_error=pending_deletion'))
         # allauth only links an existing account by email when the provider verified that email
         if sociallogin.user.pk and not sociallogin.user.is_verified:
             mark_verified(sociallogin.user)
@@ -40,4 +55,4 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         return user
 
     def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
-        raise ImmediateHttpResponse(redirect(f'{settings.FRONTEND_URL}/auth/login?social_error={error or "unknown"}'))
+        raise ImmediateHttpResponse(social_redirect(request, '/auth/login', f'social_error={error or "unknown"}'))

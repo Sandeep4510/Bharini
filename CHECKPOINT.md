@@ -272,3 +272,16 @@ Build order agreed with the user: (1) Login → (2) Home feed, Profile, Messages
 - 2026-11-01: EAS project @sanath7/bharini linked (projectId in app.json). EAS Simulator not enabled (waitlist); tested via Appetize.io instead (app key xzkw2hfxrieubn5msmgkigucpi).
 - First iOS build crashed at launch: dyld missing ExpoModulesJSI symbol (prebuilt expo-camera vs expo-modules-jsi 58.0.20). Fixed with `npx expo install --fix` (expo 58.0.22, modules-jsi 58.0.21). Rebuilt (build e02be559), uploaded, NOT yet confirmed launching. Android APK must be rebuilt after this upgrade.
 - Tunnels/Metro/Django stopped; backend/.env and apps/mobile/.env restored (10.0.2.2). Next: real iPhone via `development` profile (needs Apple Developer account).
+
+## Writer artist type (2026-11-09, uncommitted)
+- `Discipline.WRITER`; slots `writer/post_1..post_5`, kind `writing` (picture or text per post, text max 2000 chars, no video, no casting photos).
+- `PortfolioMedia` gained `text` + kind `text`, `file` blank (migration `profiles/0007`, applied to dev DB). PUT `media/writer/post_N/` takes `file` (picture) or `text`; saving one kind deletes the other.
+- `media_slots[].slots[].file` now also has `kind` and `text`; `url` is null for text posts.
+- Web: `WritingSlot` in `media-slot-grid.tsx`, text shown in `public-portfolio.tsx`, search language filter for writers. Mobile: `WritingSlotCard` in `portfolio-step.tsx` (camera via ImagePicker, gallery, text box).
+- Test `test_writer_posts_switch_between_picture_and_text` passes. Not yet clicked through in the browser or emulator.
+
+## Pre-hardware audit (2026-11-09)
+- Mobile memory audit clean: timers/listeners cleaned up, lists use FlatList, videos mount a player only on tap, camera/picker pass file URIs (no base64), uploads stream via expo-file-system File.
+- Added root `ErrorBoundary` in `apps/mobile/src/app/_layout.tsx`.
+- `npx expo install --fix` again (8 patch drifts); expo-doctor 20/20. Native app must be rebuilt (Android APK + iOS) before testing on hardware.
+- Mobile Google login (`loginWithGoogle` in lib/auth.tsx, backend `?app=1` -> `bharini://login?code=`), in-app register screen, choose-role screen. Uncommitted.
