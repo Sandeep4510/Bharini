@@ -8,6 +8,8 @@ from django.test import TestCase, override_settings
 from PIL import Image
 from rest_framework.test import APIClient
 
+from connections.models import Block
+
 from artist_posts.models import Follow, Post
 
 User = get_user_model()
@@ -183,6 +185,11 @@ class PeopleSearchAndFollowListTests(TestCase):
         self.assertNotIn('email', followers[0])
         following = client.get(f'/api/v1/users/{ravi.id}/following/').data['data']['people']
         self.assertEqual([p['name'] for p in following], ['Meera S'])
+
+        # a block hides them from the lists, and their own lists from me
+        Block.objects.create(blocker=me, blocked=ravi)
+        self.assertEqual(client.get(f'/api/v1/users/{me.id}/followers/').data['data']['people'], [])
+        self.assertEqual(client.get(f'/api/v1/users/{ravi.id}/following/').status_code, 404)
 
 
 class PostValidationAndAccessTests(TestCase):

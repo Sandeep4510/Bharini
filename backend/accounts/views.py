@@ -148,7 +148,7 @@ class RegisterAPIView(APIView):
             request,
             message='User registered successfully. Please verify your email.',
             data={
-                'user': UserSerializer(user).data,
+                'user': UserSerializer(user, context={'request': request}).data,
                 'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
             },
             status_code=status.HTTP_201_CREATED,
@@ -196,7 +196,7 @@ def login_response(request, user):
         request,
         message='Login successful.',
         data={
-            'user': UserSerializer(user).data,
+            'user': UserSerializer(user, context={'request': request}).data,
             'tokens': {'access': str(access_token), 'refresh': str(refresh_token)},
         },
     )
@@ -477,7 +477,7 @@ class MeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        return ok_response(request, message='Current user profile.', data=UserSerializer(request.user).data)
+        return ok_response(request, message='Current user profile.', data=UserSerializer(request.user, context={'request': request}).data)
 
     def delete(self, request, *args, **kwargs):
         request_deletion(request.user)
@@ -562,4 +562,4 @@ class ChooseRoleAPIView(APIView):
         request.user.role = role
         request.user.role_confirmed = True
         request.user.save(update_fields=['role', 'role_confirmed'])
-        return ok_response(request, message='Account type saved.', data=UserSerializer(request.user).data)
+        return ok_response(request, message='Account type saved.', data=UserSerializer(request.user, context={'request': request}).data)

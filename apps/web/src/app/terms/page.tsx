@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
+
+import { BackLink } from './back-link';
 
 export const metadata = { title: 'Terms & Conditions · Bharini' };
 
@@ -21,9 +22,7 @@ export default function TermsPage() {
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-white sm:px-6">
       <article className="mx-auto max-w-3xl space-y-8">
         <header className="space-y-2">
-          <Link href="/" className="text-sm text-violet-300 hover:text-violet-200">
-            ← Bharini
-          </Link>
+          <BackLink />
           <h1 className="text-3xl font-semibold">Terms &amp; Conditions</h1>
           <p className="text-sm text-slate-400">Last updated: {LAST_UPDATED}</p>
         </header>

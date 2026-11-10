@@ -65,6 +65,7 @@ class UserSerializer(serializers.ModelSerializer):
     onboarding_complete = serializers.SerializerMethodField()
     completion_percent = serializers.SerializerMethodField()
     username = serializers.SerializerMethodField()
+    profile_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -81,6 +82,7 @@ class UserSerializer(serializers.ModelSerializer):
             'onboarding_complete',
             'completion_percent',
             'role_confirmed',
+            'profile_photo',
         )
         read_only_fields = fields
 
@@ -93,6 +95,15 @@ class UserSerializer(serializers.ModelSerializer):
     def get_username(self, obj):
         profile = getattr(obj, 'artist_profile', None) or getattr(obj, 'production_profile', None)
         return profile.username if profile else None
+
+    def get_profile_photo(self, obj):
+        artist = getattr(obj, 'artist_profile', None)
+        production = getattr(obj, 'production_profile', None)
+        photo = artist.profile_photo if artist else production.profile_picture if production else None
+        if not photo:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(photo.url) if request else photo.url
 
     def get_completion_percent(self, obj):
         profile = getattr(obj, 'artist_profile', None)

@@ -706,8 +706,10 @@ class MeTests(AuthTestCase):
             {
                 'id', 'email', 'username', 'first_name', 'last_name', 'role', 'is_verified',
                 'email_verified_at', 'date_joined', 'onboarding_complete', 'completion_percent', 'role_confirmed',
+                'profile_photo',
             },
         )
+        self.assertIsNone(data['profile_photo'])
         self.assertEqual(data['id'], user.pk)
         self.assertEqual(data['role'], 'production_house')
         self.assertTrue(data['is_verified'])

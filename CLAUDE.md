@@ -68,6 +68,7 @@ Test accounts are listed in `test_profiles.txt`.
 - Never run `next build` while `next dev` is running: it clobbers `.next`.
 - Mobile uploads must use an `expo-file-system` `File` (`lib/config.ts` `toUpload`). React Native's old `{uri, name, type}` form parts are rejected.
 - The camera must be a route (`src/app/camera.tsx`), not a Modal: Android only sends volume-key events to the main window.
+- Never put tests (or any non-route file) in `apps/mobile/src/app/`: Expo Router bundles every file there into the app. Screen tests go in `src/__tests__/`.
 - Blocked users must stay hidden everywhere: feeds, comments, profiles, search, follows, connections and conversations.
 - When merging other developers' work, keep the pulled version's structure, and check the diff for silent reverts. Commit `03b5e8e` once reverted finished work.
 

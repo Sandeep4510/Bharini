@@ -229,6 +229,7 @@ Responses:
 | `date_joined` | datetime | |
 | `onboarding_complete` | bool | Always `true` for non-artists. For artists, `true` once the profile is complete. |
 | `completion_percent` | int or null | Artist profile completion, 0-100. `null` if no profile. |
+| `profile_photo` | string or null | Absolute URL of the artist's profile photo or the production house's picture. `null` if none. |
 
 - `401` `{"detail": ...}` if the bearer token is missing or invalid.
 

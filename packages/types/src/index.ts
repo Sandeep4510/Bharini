@@ -13,6 +13,7 @@ export type AuthUser = {
   date_joined: string;
   onboarding_complete?: boolean;
   completion_percent?: number | null;
+  profile_photo?: string | null;
 };
 
 export type Discipline = 'actor' | 'singer' | 'choreographer' | 'musician' | 'director' | 'cinematographer' | 'writer';

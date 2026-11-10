@@ -3,5 +3,5 @@
 cd /d "C:\Users\ASUS\PycharmProjects\Bharini"
 
 npx concurrently -k -n DJANGO,FRONTEND -c blue,green ^
-  "cd backend && python manage.py runserver" ^
+  "cd backend && ..\venv\Scripts\python.exe manage.py runserver 8000" ^
   "cd apps/web && npm run dev"

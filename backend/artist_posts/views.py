@@ -289,13 +289,15 @@ class FollowListAPIView(APIView):
     which = 'followers'
 
     def get(self, request, user_id, *args, **kwargs):
-        user = User.objects.filter(pk=user_id, is_active=True).first()
+        hidden = blocked_ids(request.user)  # blocked accounts stay hidden in both directions
+        user = User.objects.filter(pk=user_id, is_active=True).exclude(pk__in=hidden).first()
         if not user:
             return not_found(request, 'Profile')
         if self.which == 'followers':
             people = User.objects.filter(following__followee=user, is_active=True)
         else:
             people = User.objects.filter(followers__follower=user, is_active=True)
+        people = people.exclude(pk__in=hidden)
         # shortcut: first FOLLOW_LIST_LIMIT, newest follows first; page it once accounts get big audiences
         people = people.select_related('artist_profile', 'production_profile').order_by('-id')[:FOLLOW_LIST_LIMIT]
         return ok_response(request, message=self.which.title(), data={'people': [user_summary(request, p) for p in people]})
