@@ -187,7 +187,19 @@ export type Conversation = {
   can_message: boolean;
 };
 
-export type NotificationKind = 'messages' | 'connections' | 'follows' | 'casting';
+export type NotificationKind = 'messages' | 'connections' | 'follows' | 'casting' | 'likes' | 'comments';
+
+/** One entry in the in-app list (/notifications/list/); `data` is the same routing payload a push carries. */
+export type NotificationItem = {
+  id: number;
+  kind: Exclude<NotificationKind, 'messages'>;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  actor: UserSummary | null;
+  read: boolean;
+  created_at: string;
+};
 
 export type NotificationSettings = Record<NotificationKind, boolean>;
 

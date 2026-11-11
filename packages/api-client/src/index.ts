@@ -14,6 +14,7 @@ import type {
   Conversation,
   CursorPage,
   FollowerResult,
+  NotificationItem,
   NotificationSettings,
   PhotoSlot,
   Post,
@@ -581,6 +582,18 @@ export class ApiClient {
       method: 'PATCH',
       body: JSON.stringify(changes),
     });
+  }
+
+  getNotifications() {
+    return this.request<AuthApiResponse<{ notifications: NotificationItem[] }>>('/api/v1/notifications/list/');
+  }
+
+  getUnreadNotificationCount() {
+    return this.request<AuthApiResponse<{ unread: number }>>('/api/v1/notifications/unread-count/');
+  }
+
+  markNotificationsRead() {
+    return this.request<AuthApiResponse<null>>('/api/v1/notifications/read/', { method: 'POST' });
   }
 
   getUnreadMessageCount() {

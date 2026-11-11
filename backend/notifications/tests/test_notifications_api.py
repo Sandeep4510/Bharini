@@ -6,7 +6,9 @@ from rest_framework.test import APIClient
 
 from connections.models import Connection
 from notifications import push
-from notifications.models import PushDevice
+from artist_posts.models import Post as ArtistPost
+from connections.models import Block
+from notifications.models import Notification, PushDevice
 from production_posts.models import CastingCall, Post as CastingPost
 from productions.models import ProductionProfile
 from profiles.models import ArtistProfile
@@ -55,7 +57,7 @@ class PushTests(TestCase):
         self.assertEqual(self.sent[0]['data'], {'kind': 'messages', 'conversation_id': conversation})
 
         settings = self.client_for(self.ravi).patch('/api/v1/notifications/settings/', {'messages': False}, format='json').data['data']
-        self.assertEqual(settings, {'messages': False, 'connections': True, 'follows': True, 'casting': True})
+        self.assertEqual(settings, {'messages': False, 'connections': True, 'follows': True, 'casting': True, 'likes': True, 'comments': True})
         with self.captureOnCommitCallbacks(execute=True):
             asha.post(url, {'body': 'Hello?'}, format='json')
         self.assertEqual(len(self.sent), 1)  # muted
@@ -96,3 +98,61 @@ class PushTests(TestCase):
         with mock.patch.object(push, '_post', return_value=tickets):
             push.send_now([{'to': TOKEN_A, 'title': 't', 'body': 'b', 'data': {}}])
         self.assertFalse(PushDevice.objects.filter(token=TOKEN_A).exists())
+
+
+class NotificationListTests(TestCase):
+    def setUp(self):
+        self.asha = User.objects.create_user(email='asha@example.com', first_name='Asha', last_name='Rao', password='StrongPass123!')
+        self.ravi = User.objects.create_user(email='ravi@example.com', first_name='Ravi', last_name='K', password='StrongPass123!')
+        self.post = ArtistPost.objects.create(author=self.asha, body='My showreel')
+        self.sent = []
+        patcher = mock.patch.object(push, '_send_in_background', side_effect=self.sent.extend)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def client_for(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def listed(self, user):
+        return self.client_for(user).get('/api/v1/notifications/list/').data['data']['notifications']
+
+    def test_likes_and_comments_are_listed_once_and_not_for_your_own_post(self):
+        ravi = self.client_for(self.ravi)
+        ravi.post(f'/api/v1/posts/{self.post.id}/like/')
+        ravi.post(f'/api/v1/posts/{self.post.id}/like/')  # already liked: no second entry
+        ravi.post(f'/api/v1/posts/{self.post.id}/comments/', {'body': 'Great work!'}, format='json')
+        self.client_for(self.asha).post(f'/api/v1/posts/{self.post.id}/like/')  # own post
+
+        items = self.listed(self.asha)
+        self.assertEqual([(item['kind'], item['body']) for item in items], [('comments', 'Great work!'), ('likes', 'Ravi K liked your post.')])
+        self.assertEqual(items[0]['actor']['id'], self.ravi.id)
+        self.assertEqual(items[0]['data'], {'post_id': self.post.id})
+        self.assertEqual(self.listed(self.ravi), [])
+
+    def test_unread_count_and_mark_read(self):
+        self.client_for(self.ravi).post(f'/api/v1/users/{self.asha.id}/follow/')
+        asha = self.client_for(self.asha)
+        self.assertEqual(asha.get('/api/v1/notifications/unread-count/').data['data']['unread'], 1)
+        asha.post('/api/v1/notifications/read/')
+        self.assertEqual(asha.get('/api/v1/notifications/unread-count/').data['data']['unread'], 0)
+        self.assertTrue(self.listed(self.asha)[0]['read'])
+
+    def test_blocked_actor_is_hidden(self):
+        self.client_for(self.ravi).post(f'/api/v1/posts/{self.post.id}/like/')
+        Block.objects.create(blocker=self.asha, blocked=self.ravi)
+        self.assertEqual(self.listed(self.asha), [])
+        self.assertEqual(self.client_for(self.asha).get('/api/v1/notifications/unread-count/').data['data']['unread'], 0)
+
+    def test_muted_kind_is_listed_but_not_pushed(self):
+        PushDevice.objects.create(user=self.asha, token=TOKEN_A, platform='android')
+        self.client_for(self.asha).patch('/api/v1/notifications/settings/', {'likes': False}, format='json')
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client_for(self.ravi).post(f'/api/v1/posts/{self.post.id}/like/')
+        self.assertEqual(self.sent, [])
+        self.assertEqual(Notification.objects.filter(recipient=self.asha, kind='likes').count(), 1)
+
+    def test_messages_are_pushed_but_not_listed(self):
+        push.notify([self.asha], 'messages', 'Ravi K', 'Hi', {'conversation_id': 1}, actor=self.ravi)
+        self.assertFalse(Notification.objects.exists())

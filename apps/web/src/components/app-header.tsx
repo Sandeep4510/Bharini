@@ -14,17 +14,26 @@ export function AppHeader({ greet = false }: { greet?: boolean }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [unread, setUnread] = useState(0);
+  const [alerts, setAlerts] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const load = () =>
+    const load = () => {
+      // the badges are hints; skip a failed check
       apiClient
         .getUnreadMessageCount()
         .then((response) => {
           if (!cancelled) setUnread(response.data?.unread ?? 0);
         })
-        .catch(() => undefined); // the badge is a hint; skip a failed check
+        .catch(() => undefined);
+      apiClient
+        .getUnreadNotificationCount()
+        .then((response) => {
+          if (!cancelled) setAlerts(response.data?.unread ?? 0);
+        })
+        .catch(() => undefined);
+    };
     void load();
     const timer = window.setInterval(() => void load(), 30000);
     return () => {
@@ -41,9 +50,13 @@ export function AppHeader({ greet = false }: { greet?: boolean }) {
   return (
     <header className="flex items-center justify-between gap-3">
       <Link href="/home" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">
-          B
-        </span>
+        {user?.profile_photo ? (
+          <img src={user.profile_photo} alt="" className="h-10 w-10 rounded-full object-cover" />
+        ) : (
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-500 font-bold text-white">
+            {user?.first_name?.[0]?.toUpperCase() || 'B'}
+          </span>
+        )}
         <span>{user?.first_name ? `${greet ? 'Hi ' : ''}${user.first_name}` : 'Bharini'}</span>
       </Link>
       <nav className="flex items-center gap-4 text-sm">
@@ -55,6 +68,14 @@ export function AppHeader({ greet = false }: { greet?: boolean }) {
           {unread ? (
             <span className="absolute -right-3 -top-2 rounded-full bg-violet-500 px-1.5 text-[10px] font-semibold text-white" aria-label={`${unread} unread`}>
               {unread > 99 ? '99+' : unread}
+            </span>
+          ) : null}
+        </Link>
+        <Link href="/notifications" className="relative text-slate-300 hover:text-white">
+          Notifications
+          {alerts ? (
+            <span className="absolute -right-3 -top-2 rounded-full bg-violet-500 px-1.5 text-[10px] font-semibold text-white" aria-label={`${alerts} unread`}>
+              {alerts > 99 ? '99+' : alerts}
             </span>
           ) : null}
         </Link>

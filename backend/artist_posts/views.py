@@ -120,7 +120,10 @@ class PostLikeAPIView(APIView):
         post = Post.objects.filter(pk=post_id, author__is_active=True).first()
         if not post:
             return not_found(request)
-        PostLike.objects.get_or_create(post=post, user=request.user)
+        _, created = PostLike.objects.get_or_create(post=post, user=request.user)
+        if created and post.author_id != request.user.id:
+            name = user_summary(request, request.user)['name']
+            notify([post.author], 'likes', 'New like', f'{name} liked your post.', {'post_id': post.id}, actor=request.user)
         return self.respond(request, post)
 
     def delete(self, request, post_id, *args, **kwargs):
@@ -150,7 +153,10 @@ class PostCommentsAPIView(APIView):
         serializer = CommentSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return validation_error(request, 'Please fix your comment.', serializer.errors)
-        serializer.save(post=post, author=request.user)
+        comment = serializer.save(post=post, author=request.user)
+        if post.author_id != request.user.id:
+            name = user_summary(request, request.user)['name']
+            notify([post.author], 'comments', f'{name} commented on your post', comment.body[:100], {'post_id': post.id}, actor=request.user)
         return ok_response(request, message='Comment added.', data=serializer.data, status_code=status.HTTP_201_CREATED)
 
 
@@ -252,7 +258,7 @@ class FollowAPIView(APIView):
         _, created = Follow.objects.get_or_create(follower=request.user, followee=user)
         if created:
             name = user_summary(request, request.user)['name']
-            notify([user], 'follows', 'New follower', f'{name} started following you.', {'user_id': request.user.id})
+            notify([user], 'follows', 'New follower', f'{name} started following you.', {'user_id': request.user.id}, actor=request.user)
         return self.respond(request, user)
 
     def delete(self, request, user_id, *args, **kwargs):

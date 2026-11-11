@@ -8,7 +8,7 @@ import urllib.request
 
 from django.db import transaction
 
-from .models import NotificationSettings, PushDevice
+from .models import Notification, NotificationSettings, PushDevice
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +53,16 @@ def _send_in_background(messages):
     threading.Thread(target=send_now, args=(messages,), daemon=True).start()
 
 
-def notify(users, kind, title, body, data):
-    """Push to every phone of `users` who keep `kind` switched on. Sent only once the current transaction commits."""
+def notify(users, kind, title, body, data, actor=None):
+    """Save to each user's in-app list (not messages), then push to every phone of `users` who keep `kind` on.
+
+    The push goes only once the current transaction commits; settings mute the push, never the list.
+    """
     user_ids = {user.pk for user in users}
+    if kind != 'messages':
+        Notification.objects.bulk_create(
+            [Notification(recipient_id=pk, actor=actor, kind=kind, title=title, body=body[:200], data=data) for pk in user_ids]
+        )
     muted = set(NotificationSettings.objects.filter(user_id__in=user_ids, **{kind: False}).values_list('user_id', flat=True))
     tokens = list(PushDevice.objects.filter(user_id__in=user_ids - muted).values_list('token', flat=True))
     if not tokens:
